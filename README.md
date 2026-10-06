@@ -19,8 +19,8 @@ https://2026-donga-dataai-5.github.io/sainjo/
 
 ```powershell
 py -3 -m venv .venv
-..\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
-..\.venv\Scripts\python.exe app.py
+.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+.\.venv\Scripts\python.exe app.py
 ```
 
 기본 주소는 `http://127.0.0.1:8081`입니다. GitHub Actions는 소스 압축을 풀어 정적 페이지를 빌드한 뒤 GitHub Pages에 배포합니다.
