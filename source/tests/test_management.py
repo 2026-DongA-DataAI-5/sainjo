@@ -37,6 +37,25 @@ class ManagementEngineTests(unittest.TestCase):
             data["as_of_date"] if as_of_date is None else as_of_date,
         )
 
+    def assert_result_contract(self, result):
+        self.assertEqual(
+            set(result),
+            {
+                "item_key", "history_status", "timing_status", "labels", "next_mileage",
+                "next_date", "reasons", "missing_fields", "rule_id", "source",
+                "checked_date", "questions", "is_fixture",
+            },
+        )
+        for field in ("item_key", "history_status", "timing_status"):
+            self.assertIsInstance(result[field], str)
+        for field in ("labels", "reasons", "missing_fields", "questions"):
+            self.assertIsInstance(result[field], list)
+        for field in ("rule_id", "source", "checked_date"):
+            self.assertTrue(result[field] is None or isinstance(result[field], str))
+        self.assertTrue(result["next_mileage"] is None or type(result["next_mileage"]) is int)
+        self.assertTrue(result["next_date"] is None or isinstance(result["next_date"], str))
+        self.assertIsInstance(result["is_fixture"], bool)
+
     def test_fixed_contract_fixture(self):
         result = self.evaluate()
         for field in self.case["compare_fields"]:
@@ -126,7 +145,7 @@ class ManagementEngineTests(unittest.TestCase):
 
     def test_missing_or_invalid_vehicle_id_prevents_cross_vehicle_calculation(self):
         records = copy.deepcopy(self.case["input"]["records"])
-        for vehicle_id in (None, 0, True, "1"):
+        for vehicle_id in (None, 0, True, 1.0, "1"):
             with self.subTest(vehicle_id=vehicle_id):
                 vehicle = copy.deepcopy(self.case["input"]["vehicle"])
                 if vehicle_id is None:
@@ -141,6 +160,87 @@ class ManagementEngineTests(unittest.TestCase):
                 self.assertIn("vehicle.id", result["missing_fields"])
                 self.assertIsNone(result["next_mileage"])
                 self.assertIsNone(result["next_date"])
+
+    def test_non_mapping_vehicle_or_rule_returns_unknown_contract(self):
+        for vehicle in (None, "vehicle", []):
+            with self.subTest(value=vehicle):
+                result = evaluate_management(
+                    vehicle,
+                    copy.deepcopy(self.case["input"]["records"]),
+                    copy.deepcopy(self.case["input"]["rule"]),
+                    self.case["input"]["as_of_date"],
+                )
+                self.assertEqual(result["timing_status"], "unknown")
+                self.assertIn("vehicle.id", result["missing_fields"])
+                self.assert_result_contract(result)
+
+        result = self.evaluate(rule=["not", "a", "mapping"])
+        self.assertEqual(result["timing_status"], "unknown")
+        self.assertIn("rule", result["missing_fields"])
+        self.assert_result_contract(result)
+
+    def test_non_mapping_records_are_ignored_without_mutating_inputs(self):
+        vehicle = copy.deepcopy(self.case["input"]["vehicle"])
+        valid_record = copy.deepcopy(self.case["input"]["records"][0])
+        records = [None, "not a record", 42, valid_record]
+        rule = copy.deepcopy(self.case["input"]["rule"])
+        before = copy.deepcopy((vehicle, records, rule))
+
+        result = evaluate_management(
+            vehicle, records, rule, self.case["input"]["as_of_date"]
+        )
+
+        self.assertEqual(result["timing_status"], "upcoming")
+        self.assertEqual(result["next_mileage"], 30_000)
+        self.assertEqual((vehicle, records, rule), before)
+        self.assert_result_contract(result)
+
+        only_invalid_records = self.evaluate(records=[None, "not a record", 42])
+        self.assertEqual(only_invalid_records["history_status"], "unknown")
+        self.assertEqual(only_invalid_records["timing_status"], "unknown")
+        self.assert_result_contract(only_invalid_records)
+
+    def test_malformed_vehicle_year_values_are_unknown_not_mismatches(self):
+        for year in (True, 2021.0, "2021", 0, -1, 10_000):
+            with self.subTest(year=year):
+                vehicle = copy.deepcopy(self.case["input"]["vehicle"])
+                vehicle["year"] = year
+
+                result = self.evaluate(vehicle=vehicle)
+
+                self.assertEqual(result["timing_status"], "unknown")
+                self.assertIn("vehicle.year", result["missing_fields"])
+                self.assertIsNone(result["next_mileage"])
+                self.assertIsNone(result["next_date"])
+                self.assert_result_contract(result)
+
+    def test_malformed_vehicle_mileage_values_only_disable_distance_axis(self):
+        for mileage in (True, 25_000.0, "25000"):
+            with self.subTest(mileage=mileage):
+                vehicle = copy.deepcopy(self.case["input"]["vehicle"])
+                vehicle["mileage"] = mileage
+
+                result = self.evaluate(vehicle=vehicle)
+
+                self.assertEqual(result["timing_status"], "partial")
+                self.assertIn("vehicle.mileage", result["missing_fields"])
+                self.assertIsNone(result["next_mileage"])
+                self.assertEqual(result["next_date"], "2026-07-31")
+                self.assert_result_contract(result)
+
+    def test_malformed_record_mileage_only_disables_distance_axis(self):
+        for mileage in (True, 20_000.0, "20000"):
+            with self.subTest(mileage=mileage):
+                records = copy.deepcopy(self.case["input"]["records"])
+                records[0]["mileage"] = mileage
+
+                result = self.evaluate(records=records)
+
+                self.assertEqual(result["timing_status"], "partial")
+                self.assertIn("record.mileage", result["missing_fields"])
+                self.assertIsNone(result["next_mileage"])
+                self.assertEqual(result["next_date"], "2026-07-31")
+                self.assert_result_contract(result)
 
     def test_wrong_supported_vehicle_specs_are_unsupported(self):
         mismatches = (
@@ -242,7 +342,7 @@ class ManagementEngineTests(unittest.TestCase):
 
     def test_only_records_with_strictly_matching_vehicle_id_affect_history(self):
         valid_records = copy.deepcopy(self.case["input"]["records"])
-        for invalid_vehicle_id in (True, "1", 2):
+        for invalid_vehicle_id in (True, 1.0, "1", 2):
             with self.subTest(invalid_vehicle_id=invalid_vehicle_id):
                 unrelated = copy.deepcopy(valid_records[0])
                 unrelated.update(

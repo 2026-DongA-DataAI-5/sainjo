@@ -226,7 +226,11 @@ def _applicability(
             ):
                 missing.append("rule.applicability.years")
                 continue
-            if not isinstance(actual, int) or isinstance(actual, bool):
+            if (
+                not isinstance(actual, int)
+                or isinstance(actual, bool)
+                or not 1 <= actual <= 9999
+            ):
                 missing.append("vehicle.year")
             elif actual not in expected:
                 mismatched.append("year")
