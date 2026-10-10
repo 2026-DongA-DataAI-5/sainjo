@@ -327,8 +327,9 @@
     }
   }
 
-  function redirectToExpiredLogin() {
-    window.location.assign(appPath('/login?expired=1'));
+  // 401은 로그인되지 않았거나 세션이 유효하지 않은 경우입니다. 서버 응답만으로는 둘을 구분할 수 없으므로 만료 안내를 붙이지 않습니다.
+  function redirectToLogin() {
+    window.location.assign(appPath('/login?required=1'));
   }
 
   async function initAccountStatus(box) {
@@ -352,7 +353,7 @@
           window.location.assign(appPath('/login'));
         } catch (error) {
           if (error && error.status === 401) {
-            redirectToExpiredLogin();
+            redirectToLogin();
             return;
           }
           logoutButton.disabled = false;
@@ -363,7 +364,7 @@
       if (error && error.status === 401) {
         // 로그인되지 않았거나 세션이 만료된 상태입니다. 로그인 화면에서 만료 안내를 보여 줍니다.
         showMessage(message, '로그인이 필요합니다. 로그인 화면으로 이동합니다.');
-        redirectToExpiredLogin();
+        redirectToLogin();
         return;
       }
       userRow.hidden = true;

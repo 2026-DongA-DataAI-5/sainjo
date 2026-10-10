@@ -28,6 +28,7 @@ def login():
         auth_mode="login",
         api_mode=_auth_api_mode(),
         expired=request.args.get("expired") == "1",
+        required=request.args.get("required") == "1",
     )
 
 
