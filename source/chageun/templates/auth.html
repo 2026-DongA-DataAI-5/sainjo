@@ -7,6 +7,7 @@
 {% endif %}
 
 {% if expired %}<p class="form-message" role="alert">세션이 만료되었습니다. 다시 로그인해 주세요.</p>{% endif %}
+{% if required %}<p class="form-message" role="alert">로그인이 필요합니다. 로그인한 뒤 다시 이용해 주세요.</p>{% endif %}
 
 <form class="form-panel" id="auth-form" data-auth-form="{{ auth_mode }}" novalidate>
   <div class="section-heading"><h2>{{ '로그인 정보' if auth_mode == 'login' else '새 계정 정보' }}</h2><span class="badge unknown">{{ '가상(mock)' if api_mode != 'live' else '서버 연결' }}</span></div>
