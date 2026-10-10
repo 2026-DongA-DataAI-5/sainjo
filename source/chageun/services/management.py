@@ -43,6 +43,10 @@ def _valid_mileage(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= _MILEAGE_LIMIT
 
 
+def _valid_vehicle_id(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
 def _add_months(value: date, months: int) -> date:
     """Add calendar months, clamping to the destination month's final day."""
     month_index = value.month - 1 + months
@@ -240,6 +244,26 @@ def evaluate_management(
     """
     vehicle = vehicle if isinstance(vehicle, dict) else {}
     rule = rule if isinstance(rule, dict) else None
+
+    vehicle_id = vehicle.get("id")
+    if not _valid_vehicle_id(vehicle_id):
+        is_fixture = bool(
+            rule
+            and rule.get("rights_status") == "test_fixture"
+            and rule.get("is_fixture") is True
+        )
+        item = _empty_item(
+            history_status="unknown",
+            rule=rule,
+            is_fixture=is_fixture,
+        )
+        return _finish(
+            item,
+            timing_status="unknown",
+            reasons=["차량 ID가 없어 해당 차량의 기록을 안전하게 구분할 수 없습니다"],
+            missing_fields=["vehicle.id"],
+        )
+
     relevant_records, replacements = _history_for_vehicle(vehicle, records)
     history_status = "recorded" if relevant_records else "unknown"
 

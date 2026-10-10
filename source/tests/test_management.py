@@ -124,6 +124,24 @@ class ManagementEngineTests(unittest.TestCase):
         result = self.evaluate(records=[record])
         self.assertEqual(result["history_status"], "unknown")
 
+    def test_missing_or_invalid_vehicle_id_prevents_cross_vehicle_calculation(self):
+        records = copy.deepcopy(self.case["input"]["records"])
+        for vehicle_id in (None, 0, True, "1"):
+            with self.subTest(vehicle_id=vehicle_id):
+                vehicle = copy.deepcopy(self.case["input"]["vehicle"])
+                if vehicle_id is None:
+                    vehicle.pop("id")
+                else:
+                    vehicle["id"] = vehicle_id
+
+                result = self.evaluate(vehicle=vehicle, records=records)
+
+                self.assertEqual(result["history_status"], "unknown")
+                self.assertEqual(result["timing_status"], "unknown")
+                self.assertIn("vehicle.id", result["missing_fields"])
+                self.assertIsNone(result["next_mileage"])
+                self.assertIsNone(result["next_date"])
+
     def test_wrong_generation_engine_or_year_is_unsupported(self):
         for field, value in (("generation", "JF"), ("engine", "1.6 T-GDI"), ("year", 2024)):
             with self.subTest(field=field):
