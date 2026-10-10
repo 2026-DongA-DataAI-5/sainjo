@@ -118,22 +118,26 @@
     return { user: { ...MOCK_USER }, vehicles: [], records: [], nextId: { vehicle: 1, record: 1 }, calculation: 'unavailable', failNext: null };
   }
 
+  // memoryStore는 sessionStorage 저장이 실패했을 때만 채워집니다.
+  // 값이 있으면 오래된 sessionStorage 값보다 항상 먼저 사용합니다.
   function loadStore() {
+    if (memoryStore) return memoryStore;
     try {
       const saved = JSON.parse(sessionStorage.getItem(MOCK_STORAGE_KEY) || 'null');
       if (saved && Array.isArray(saved.vehicles)) return saved;
     } catch {
-      // sessionStorage를 쓸 수 없으면 메모리에만 둡니다.
+      // sessionStorage를 읽을 수 없으면 빈 상태에서 시작합니다.
     }
-    return memoryStore || emptyStore();
+    return emptyStore();
   }
 
   function saveStore(store) {
-    memoryStore = store;
     try {
       sessionStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(store));
+      memoryStore = null; // 저장에 성공했으므로 sessionStorage가 기준입니다.
     } catch {
-      // 메모리 보관으로 계속 진행합니다.
+      // 저장에 실패하면 메모리 사본을 우선 사용합니다(새로고침 시 사라짐).
+      memoryStore = store;
     }
   }
 
