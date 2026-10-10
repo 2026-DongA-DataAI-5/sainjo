@@ -579,6 +579,55 @@ class VehicleApiTest(unittest.TestCase):
         error = self.assert_error(self.create(self.client_a, {}), 400, "VALIDATION_ERROR")
         self.assertEqual(set(error["error"]["fields"]), {"manufacturer", "model"})
 
+    def test_blank_strings_are_400_and_null_is_the_way_to_say_unknown(self):
+        blanks = {
+            "manufacturer": "현대",
+            "model": "아반떼",
+            "engine": "",
+            "fuel": "   ",
+            "transmission": "",
+            "generation": "",
+            "year": "",
+            "mileage": "",
+            "reference_date": "",
+            "conditions": "",
+        }
+        error = self.assert_error(self.create(self.client_a, blanks), 400, "VALIDATION_ERROR")
+        self.assertEqual(
+            set(error["error"]["fields"]),
+            {"engine", "fuel", "transmission", "generation", "year", "mileage", "reference_date", "conditions"},
+        )
+        for message in error["error"]["fields"].values():
+            self.assertIn("null", message)
+        self.assertEqual(self.vehicles.rows, [])
+
+        # 같은 입력을 모르는 값으로 보내면(null, 차종은 unknown) 등록됩니다.
+        unknowns = {
+            "manufacturer": "현대",
+            "model": "아반떼",
+            "engine": None,
+            "fuel": None,
+            "transmission": None,
+            "generation": None,
+            "year": None,
+            "mileage": None,
+            "reference_date": None,
+            "conditions": "unknown",
+        }
+        self.assertEqual(self.create(self.client_a, unknowns).status_code, 201)
+        data = self.client_a.get("/api/vehicles/1").get_json()["data"]
+        self.assertIsNone(data["mileage"])
+        self.assertIsNone(data["reference_date"])
+        self.assertEqual(data["conditions"], "unknown")
+
+    def test_blank_required_field_is_400_with_required_guidance(self):
+        error = self.assert_error(
+            self.create(self.client_a, {"manufacturer": "  ", "model": "아반떼"}), 400, "VALIDATION_ERROR"
+        )
+        self.assertIn("manufacturer", error["error"]["fields"])
+        self.assertIn("null", error["error"]["fields"]["manufacturer"])
+        self.assertEqual(self.vehicles.rows, [])
+
     def test_boundary_values_are_accepted(self):
         body = {
             "manufacturer": "현대",

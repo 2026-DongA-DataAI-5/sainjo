@@ -206,43 +206,62 @@ def _is_int(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+VEHICLE_BLANK_MESSAGE = "빈 문자열은 보낼 수 없습니다. 모르는 값은 null로 보내 주세요."
+
+
+def _is_blank_text(value):
+    return isinstance(value, str) and not value.strip()
+
+
 def _vehicle_values(body):
-    """차량 입력을 검증해 DB에 넣을 값을 돌려줍니다. 선택 항목의 미입력(키 없음)과 null은 '값 없음'으로 저장하고,
-    주행거리 0과 null, 날짜 값과 null은 서로 다른 값으로 보존합니다. 제조사·모델은 필수입니다."""
+    """차량 입력을 검증해 DB에 넣을 값을 돌려줍니다.
+
+    계약: 모르는 선택 항목은 null로 보냅니다(빈 문자열 ""과 공백만 있는 값은 400). 제조사·모델은 필수입니다.
+    주행거리 0과 null, 날짜 값과 null은 서로 다른 값으로 보존합니다.
+    """
     fields = {}
+
+    def reject(key, message):
+        # 같은 필드에 여러 오류가 나도 첫 번째 안내를 유지합니다.
+        fields.setdefault(key, message)
+
     for key in set(body) - VEHICLE_FIELDS:
-        fields[key] = "허용되지 않은 필드입니다."
+        reject(key, "허용되지 않은 필드입니다.")
+    for key in VEHICLE_FIELDS:
+        if _is_blank_text(body.get(key)):
+            reject(key, VEHICLE_BLANK_MESSAGE)
 
     values = {}
 
     for key, limit in VEHICLE_TEXT_LIMITS.items():
         value = body.get(key)
-        if value is None and key in VEHICLE_REQUIRED_TEXT:
-            fields[key] = "필수 입력 항목입니다."
-        elif value is None:
-            values[key] = None
+        if value is None:
+            if key in VEHICLE_REQUIRED_TEXT:
+                reject(key, "필수 입력 항목입니다.")
+            else:
+                values[key] = None
         elif isinstance(value, str) and 1 <= len(value.strip()) <= limit:
             values[key] = value.strip()
         else:
-            fields[key] = f"1~{limit}자로 입력하거나 비워 두세요."
+            reject(key, f"1~{limit}자로 입력해 주세요.")
 
     generation = body.get("generation")
     if generation is None or (isinstance(generation, str) and generation in VEHICLE_GENERATIONS):
         values["generation"] = generation
     else:
-        fields["generation"] = "DL3 또는 JF 중에서 선택해 주세요."
+        reject("generation", "DL3 또는 JF 중에서 선택해 주세요.")
 
     year = body.get("year")
     if year is None or (_is_int(year) and VEHICLE_YEAR_MIN <= year <= VEHICLE_YEAR_MAX):
         values["year"] = year
     else:
-        fields["year"] = f"{VEHICLE_YEAR_MIN}~{VEHICLE_YEAR_MAX} 사이의 연식을 입력해 주세요."
+        reject("year", f"{VEHICLE_YEAR_MIN}~{VEHICLE_YEAR_MAX} 사이의 숫자로 입력해 주세요.")
 
     mileage = body.get("mileage")
     if mileage is None or (_is_int(mileage) and 0 <= mileage <= VEHICLE_MILEAGE_MAX):
         values["mileage"] = mileage
     else:
-        fields["mileage"] = f"0~{VEHICLE_MILEAGE_MAX}km 사이로 입력해 주세요. 모르면 비워 두세요."
+        reject("mileage", f"0~{VEHICLE_MILEAGE_MAX}km 사이의 숫자로 입력해 주세요. 모르면 null을 보내 주세요.")
 
     reference_date = body.get("reference_date")
     if reference_date is None:
@@ -252,15 +271,15 @@ def _vehicle_values(body):
             date.fromisoformat(reference_date)
             values["reference_date"] = reference_date
         except ValueError:
-            fields["reference_date"] = "YYYY-MM-DD 형식의 실제 날짜를 입력해 주세요."
+            reject("reference_date", "YYYY-MM-DD 형식의 실제 날짜를 입력해 주세요.")
     else:
-        fields["reference_date"] = "YYYY-MM-DD 형식의 날짜를 입력하거나 비워 두세요."
+        reject("reference_date", "YYYY-MM-DD 형식의 날짜를 입력해 주세요. 모르면 null을 보내 주세요.")
 
     conditions = body.get("conditions", "unknown")
     if isinstance(conditions, str) and conditions in VEHICLE_CONDITIONS:
         values["conditions"] = conditions
     else:
-        fields["conditions"] = "normal, severe, unknown 중에서 선택해 주세요."
+        reject("conditions", "normal, severe, unknown 중에서 선택해 주세요.")
 
     return values, fields
 
