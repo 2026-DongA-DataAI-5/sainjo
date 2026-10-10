@@ -1,0 +1,5 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">첫 차량 관리를 차근차근</p><h1>차근 시작하기</h1><p class="lede">차량 등록부터 다음 관리까지 이어지는 화면을 확인해 보세요.</p></div></div>
+<section class="form-panel compact"><h2>로그인 화면 초안</h2><p>실제 회원가입과 로그인은 다음 개발 단계입니다. 비밀번호를 입력하거나 수집하지 않습니다.</p><label for="demo-id">아이디</label><input id="demo-id" type="text" value="가상 사용자" disabled><label for="demo-password">비밀번호</label><input id="demo-password" type="password" placeholder="인증 구현 후 사용" disabled><div class="form-actions"><a class="button primary" href="{{ url_for('pages.dashboard') }}">가상 데이터로 둘러보기 →</a></div><p class="muted">가상 화면 열람은 로그인 성공을 의미하지 않습니다.</p></section>
+{% endblock %}
