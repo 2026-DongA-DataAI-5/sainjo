@@ -210,6 +210,100 @@ class ManagementEngineTests(unittest.TestCase):
                 self.assertIsNone(result["next_mileage"])
                 self.assertIsNone(result["next_date"])
 
+    def test_malformed_rule_years_are_unknown(self):
+        invalid_year_values = (True, "2021", 0, -1, 2021.0)
+        for invalid_year in invalid_year_values:
+            with self.subTest(invalid_year=invalid_year):
+                rule = copy.deepcopy(self.case["input"]["rule"])
+                rule["applicability"]["years"].append(invalid_year)
+
+                result = self.evaluate(rule=rule)
+
+                self.assertEqual(result["timing_status"], "unknown")
+                self.assertIn("rule.applicability.years", result["missing_fields"])
+                self.assertIsNone(result["next_mileage"])
+                self.assertIsNone(result["next_date"])
+
+        rule = copy.deepcopy(self.case["input"]["rule"])
+        rule["applicability"]["years"] = []
+        result = self.evaluate(rule=rule)
+        self.assertEqual(result["timing_status"], "unknown")
+        self.assertIn("rule.applicability.years", result["missing_fields"])
+        self.assertIsNone(result["next_mileage"])
+        self.assertIsNone(result["next_date"])
+
+        vehicle = copy.deepcopy(self.case["input"]["vehicle"])
+        vehicle["manufacturer"] = "현대"
+        result = self.evaluate(vehicle=vehicle, rule=rule)
+        self.assertEqual(result["timing_status"], "unknown")
+        self.assertIn("rule.applicability.years", result["missing_fields"])
+        self.assertIsNone(result["next_mileage"])
+        self.assertIsNone(result["next_date"])
+
+    def test_only_records_with_strictly_matching_vehicle_id_affect_history(self):
+        valid_records = copy.deepcopy(self.case["input"]["records"])
+        for invalid_vehicle_id in (True, "1", 2):
+            with self.subTest(invalid_vehicle_id=invalid_vehicle_id):
+                unrelated = copy.deepcopy(valid_records[0])
+                unrelated.update(
+                    vehicle_id=invalid_vehicle_id,
+                    date="2026-05-31",
+                    mileage=90_000,
+                )
+
+                only_unrelated = self.evaluate(records=[unrelated])
+                self.assertEqual(only_unrelated["history_status"], "unknown")
+                self.assertEqual(only_unrelated["timing_status"], "unknown")
+                self.assertIsNone(only_unrelated["next_mileage"])
+                self.assertIsNone(only_unrelated["next_date"])
+
+                with_unrelated = self.evaluate(records=valid_records + [unrelated])
+                self.assertEqual(with_unrelated["history_status"], "recorded")
+                self.assertEqual(with_unrelated["timing_status"], "upcoming")
+                self.assertEqual(with_unrelated["next_mileage"], 30_000)
+                self.assertEqual(with_unrelated["next_date"], "2026-07-31")
+
+    def test_date_period_overflow_returns_contract_shaped_unknown(self):
+        vehicle = copy.deepcopy(self.case["input"]["vehicle"])
+        vehicle.update(reference_date="9999-12-31", mileage=25_000)
+        records = copy.deepcopy(self.case["input"]["records"])
+        records[0].update(date="9999-12-31", mileage=20_000)
+
+        for interval_months in (1, 2_147_483_647):
+            with self.subTest(interval_months=interval_months):
+                rule = copy.deepcopy(self.case["input"]["rule"])
+                rule["interval_months"] = interval_months
+
+                result = self.evaluate(
+                    vehicle=vehicle,
+                    records=records,
+                    rule=rule,
+                    as_of_date="9999-12-31",
+                )
+
+                self.assertEqual(result["timing_status"], "unknown")
+                # The date axis is unknown, but the independently valid distance axis remains useful.
+                self.assertEqual(result["next_mileage"], 30_000)
+                self.assertIsNone(result["next_date"])
+                self.assertEqual(
+                    set(result),
+                    {
+                        "item_key", "history_status", "timing_status", "labels", "next_mileage",
+                        "next_date", "reasons", "missing_fields", "rule_id", "source",
+                        "checked_date", "questions", "is_fixture",
+                    },
+                )
+
+    def test_out_of_range_replacement_date_does_not_calculate_a_schedule(self):
+        records = copy.deepcopy(self.case["input"]["records"])
+        records[0]["date"] = "10000-01-01"
+
+        result = self.evaluate(records=records)
+
+        self.assertEqual(result["timing_status"], "unknown")
+        self.assertIsNone(result["next_date"])
+        self.assertIsNone(result["next_mileage"])
+
     def test_unknown_conditions_and_unapproved_rule_do_not_calculate(self):
         vehicle = copy.deepcopy(self.case["input"]["vehicle"])
         vehicle["conditions"] = "unknown"

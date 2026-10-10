@@ -132,7 +132,8 @@ def _history_for_vehicle(vehicle: dict[str, Any], records: Any) -> tuple[list[di
     for record in records:
         if not isinstance(record, dict) or record.get("item_key") != ITEM_KEY:
             continue
-        if vehicle_id is not None and record.get("vehicle_id") != vehicle_id:
+        record_vehicle_id = record.get("vehicle_id")
+        if not _valid_vehicle_id(record_vehicle_id) or record_vehicle_id != vehicle_id:
             continue
         if record.get("kind") not in ("previous_history", "maintenance_result"):
             continue
@@ -155,8 +156,13 @@ def _latest_replacement(
     reasons: list[str] = []
     missing: list[str] = []
     for record in replacements:
-        parsed = _parse_iso_date(record.get("date"))
+        raw_date = record.get("date")
+        parsed = _parse_iso_date(raw_date)
         if parsed is None:
+            if raw_date is not None:
+                reasons.append("교환 날짜가 유효하지 않거나 범위를 벗어나 마지막 교환 시점을 확인할 수 없습니다")
+                missing.append("record.date")
+                return None, reasons, missing
             undated.append(record)
         else:
             dated.append((parsed, record))
@@ -208,7 +214,16 @@ def _applicability(
         expected = applicability.get("years" if field == "year" else field)
         actual = vehicle.get(field)
         if field == "year":
-            if not isinstance(expected, (list, tuple)):
+            if (
+                not isinstance(expected, (list, tuple))
+                or not expected
+                or any(
+                    not isinstance(year, int)
+                    or isinstance(year, bool)
+                    or not 1 <= year <= 9999
+                    for year in expected
+                )
+            ):
                 missing.append("rule.applicability.years")
                 continue
             if not isinstance(actual, int) or isinstance(actual, bool):
@@ -223,6 +238,8 @@ def _applicability(
             elif actual != expected:
                 mismatched.append(field)
 
+    if "rule.applicability.years" in missing:
+        return "unknown", ["관리 기준의 연식 적용 범위가 유효하지 않아 계산할 수 없습니다"], missing
     if mismatched:
         detail = ", ".join(mismatched)
         return "unsupported", [f"차량 사양({detail})이 기준 적용 대상과 다릅니다"], missing
@@ -418,7 +435,15 @@ def evaluate_management(
             reasons.append("마지막 교환일이 기준일보다 뒤라 기간 기준을 확인할 수 없습니다")
             missing_fields.append("record.date")
         else:
-            next_date = _add_months(last_date, interval_months)
+            try:
+                next_date = _add_months(last_date, interval_months)
+            except (OverflowError, ValueError):
+                return _finish(
+                    item,
+                    timing_status="unknown",
+                    reasons=reasons + ["계산한 다음 교환일이 날짜 범위를 벗어나 기간 기준을 확정할 수 없습니다"],
+                    missing_fields=missing_fields + ["rule.interval_months"],
+                )
             item["next_date"] = next_date.isoformat()
             computed_axes += 1
             if parsed_as_of >= next_date:
