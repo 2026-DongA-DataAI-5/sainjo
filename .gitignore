@@ -5,3 +5,5 @@ __pycache__/
 instance/
 *.log
 /docs/
+.venv/
+__pycache__/
