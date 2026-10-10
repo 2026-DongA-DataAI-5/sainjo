@@ -282,6 +282,8 @@ class ManagementEngineTests(unittest.TestCase):
                 )
 
                 self.assertEqual(result["timing_status"], "unknown")
+                # The date axis is unknown, but the independently valid distance axis remains useful.
+                self.assertEqual(result["next_mileage"], 30_000)
                 self.assertIsNone(result["next_date"])
                 self.assertEqual(
                     set(result),
