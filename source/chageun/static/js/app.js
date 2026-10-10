@@ -430,4 +430,87 @@
       });
     });
   }
+
+  // ───────────────────────── 로그인·회원가입 ─────────────────────────
+  // 비밀번호는 입력칸에만 있고 저장소·로그에 남기지 않습니다. 실패해도 아이디 입력값은 그대로 둡니다.
+  function initAuthForm(form) {
+    const mode = form.dataset.authForm === 'register' ? 'register' : 'login';
+    const message = form.querySelector('.form-message[role="status"]');
+    const usernameInput = form.querySelector('#username');
+    const passwordInput = form.querySelector('#password');
+    const usernameError = form.querySelector('#username-error');
+    const passwordError = form.querySelector('#password-error');
+    let busy = false;
+
+    function setFieldError(element, input, text) {
+      if (!element) return;
+      element.textContent = text || '';
+      element.hidden = !text;
+      if (input) input.setAttribute('aria-invalid', String(Boolean(text)));
+    }
+
+    function clearFieldErrors() {
+      setFieldError(usernameError, usernameInput, '');
+      setFieldError(passwordError, passwordInput, '');
+    }
+
+    function showAuthError(error) {
+      const status = error && error.status;
+      const fields = (error && error.fields) || {};
+      if (fields.username) setFieldError(usernameError, usernameInput, fields.username);
+      if (fields.password) setFieldError(passwordError, passwordInput, fields.password);
+      let text;
+      if (status === 401) {
+        text = '아이디 또는 비밀번호가 올바르지 않습니다.';
+      } else if (status === 409) {
+        setFieldError(usernameError, usernameInput, '이미 사용 중인 아이디입니다.');
+        text = '이미 사용 중인 아이디입니다. 다른 아이디를 입력해 주세요.';
+      } else if (status === 403) {
+        text = '보안 확인이 만료되었습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.';
+      } else if (Object.keys(fields).length) {
+        text = '입력을 확인해 주세요. 표시된 항목을 다시 확인해 주세요.';
+      } else {
+        text = (error && error.message) || '처리하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+      }
+      showMessage(message, text);
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (busy) return;
+      busy = true;
+      clearFieldErrors();
+      const username = usernameInput.value;
+      const password = passwordInput.value;
+      let navigating = false;
+      lockForm(form, true);
+      showMessage(message, mode === 'login' ? '로그인 확인 중입니다. 잠시만 기다려 주세요.' : '가입 요청 중입니다. 잠시만 기다려 주세요.');
+      try {
+        if (mode === 'login') {
+          await api.auth.login(username, password);
+          navigating = true;
+          showMessage(message, api.mode === 'live' ? '로그인되었습니다. 대시보드로 이동합니다.' : '가상(mock) 로그인 처리했습니다. 대시보드로 이동합니다.');
+          window.location.assign(appPath('/dashboard'));
+        } else {
+          await api.auth.register(username, password);
+          passwordInput.value = '';
+          showMessage(
+            message,
+            api.mode === 'live'
+              ? '가입이 완료되었습니다. 로그인 화면에서 로그인해 주세요.'
+              : '가상(mock) 응답으로 가입 처리했습니다. 실제 계정은 만들어지지 않았습니다.',
+          );
+        }
+      } catch (error) {
+        showAuthError(error);
+      } finally {
+        busy = false;
+        if (!navigating) lockForm(form, false);
+      }
+    });
+  }
+
+  const authForm = document.querySelector('[data-auth-form]');
+  if (authForm) initAuthForm(authForm);
+
 })();

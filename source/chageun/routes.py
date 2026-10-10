@@ -1,4 +1,4 @@
-from flask import Blueprint, abort, jsonify, render_template
+from flask import Blueprint, abort, current_app, jsonify, render_template, request
 
 from .sample_data import DEMO_HISTORY, DEMO_ITEMS, DEMO_VEHICLE, STATUS_LABELS
 
@@ -13,6 +13,27 @@ def common_context():
 @pages.get("/")
 def home():
     return render_template("landing.html", title="중고차 구매 이후 관리")
+
+
+def _auth_api_mode():
+    # 서버 모드를 명시적으로 켰을 때만 실제 인증 API(live)를 사용합니다. 기본값은 mock입니다.
+    return "live" if current_app.config.get("CHAGEUN_SERVER_MODE") else "mock"
+
+
+@pages.get("/login")
+def login():
+    return render_template(
+        "auth.html",
+        title="로그인",
+        auth_mode="login",
+        api_mode=_auth_api_mode(),
+        expired=request.args.get("expired") == "1",
+    )
+
+
+@pages.get("/register")
+def register():
+    return render_template("auth.html", title="회원가입", auth_mode="register", api_mode=_auth_api_mode(), expired=False)
 
 
 @pages.get("/start")
