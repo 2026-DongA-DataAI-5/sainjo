@@ -9,15 +9,107 @@
 """
 
 import os
+import re
 import secrets
 import unittest
+from datetime import date
 from unittest import mock
 
 import pymysql
+from pymysql.cursors import DictCursor
+from werkzeug.security import generate_password_hash
 
 from chageun import create_app
 
 TEST_SECRET = "unit-test-secret-only-not-for-deploy"
+
+# 실제 MySQL 시험은 아래 조건을 모두 만족할 때만 실행합니다. 하나라도 어기면 실행을 거부합니다.
+#  1) CHAGEUN_TEST_MYSQL_CONFIRM=disposable-test-db 로 '버려도 되는 시험 DB'임을 명시
+#  2) DB 이름이 chageun_test 또는 chageun_test_<소문자·숫자> 형식
+#  3) 연결된 실제 DB 이름이 설정값과 같고, users·vehicles 테이블이 있음
+#  4) users 테이블이 비어 있음 (데이터가 있으면 실제 사용자 DB로 보고 거부)
+MYSQL_TEST_CONFIRM = "disposable-test-db"
+MYSQL_TEST_DB_NAME = re.compile(r"chageun_test(_[a-z0-9]{1,20})?")
+
+
+def _mysql_test_config():
+    database = os.environ.get("CHAGEUN_TEST_MYSQL_DATABASE", "")
+    if not MYSQL_TEST_DB_NAME.fullmatch(database):
+        raise RuntimeError(
+            f"시험 DB 이름 '{database}'은 허용되지 않습니다. chageun_test 또는 chageun_test_<소문자·숫자> 형식만 씁니다."
+        )
+    return {
+        "MYSQL_HOST": os.environ.get("CHAGEUN_TEST_MYSQL_HOST", "127.0.0.1"),
+        "MYSQL_PORT": int(os.environ.get("CHAGEUN_TEST_MYSQL_PORT", "3306")),
+        "MYSQL_USER": os.environ.get("CHAGEUN_TEST_MYSQL_USER", ""),
+        "MYSQL_PASSWORD": os.environ.get("CHAGEUN_TEST_MYSQL_PASSWORD", ""),
+        "MYSQL_DATABASE": database,
+    }
+
+
+def _mysql_test_connect(config):
+    return pymysql.connect(
+        host=config["MYSQL_HOST"],
+        port=config["MYSQL_PORT"],
+        user=config["MYSQL_USER"],
+        password=config["MYSQL_PASSWORD"],
+        database=config["MYSQL_DATABASE"],
+        charset="utf8mb4",
+        cursorclass=DictCursor,
+        connect_timeout=5,
+    )
+
+
+def _prepare_mysql_test():
+    """가드 조건을 확인하고 시험 설정을 돌려줍니다. 조건을 어기면 AssertionError로 실패합니다(건너뛰지 않음)."""
+    config = _mysql_test_config()
+    conn = _mysql_test_connect(config)
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT DATABASE() AS name")
+            assert cursor.fetchone()["name"] == config["MYSQL_DATABASE"], "연결된 DB 이름이 설정값과 다릅니다."
+            cursor.execute(
+                "SELECT COUNT(*) AS n FROM information_schema.tables "
+                "WHERE table_schema = %s AND table_name IN ('users', 'vehicles')",
+                (config["MYSQL_DATABASE"],),
+            )
+            assert cursor.fetchone()["n"] == 2, "users·vehicles 테이블이 없습니다. schema.sql을 시험 DB에 먼저 적용하세요."
+            cursor.execute("SELECT COUNT(*) AS n FROM users")
+            assert cursor.fetchone()["n"] == 0, (
+                "시험 DB의 users 테이블에 데이터가 있어 실행을 거부합니다. 비어 있는 시험 DB를 쓰세요."
+            )
+    finally:
+        conn.close()
+    return config
+
+
+MYSQL_TESTS_ENABLED = os.environ.get("CHAGEUN_TEST_MYSQL_CONFIRM") == MYSQL_TEST_CONFIRM
+
+VEHICLE_FIELD_KEYS = {
+    "id",
+    "manufacturer",
+    "model",
+    "generation",
+    "year",
+    "engine",
+    "fuel",
+    "transmission",
+    "mileage",
+    "reference_date",
+    "conditions",
+}
+VALID_VEHICLE = {
+    "manufacturer": "현대",
+    "model": "아반떼",
+    "generation": "JF",
+    "year": 2017,
+    "engine": "1.6 GDI",
+    "fuel": "가솔린",
+    "transmission": "자동",
+    "mileage": 0,
+    "reference_date": "2026-10-01",
+    "conditions": "normal",
+}
 
 
 class FakeUsers:
@@ -210,29 +302,22 @@ class AuthApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
 
-@unittest.skipUnless(
-    os.environ.get("CHAGEUN_TEST_MYSQL_DATABASE"),
-    "시험 MySQL 환경변수(CHAGEUN_TEST_MYSQL_DATABASE 등)가 없어 실제 DB 시험을 건너뜁니다.",
-)
+@unittest.skipUnless(MYSQL_TESTS_ENABLED, "시험 MySQL 확인 환경변수가 없어 실제 DB 시험을 건너뜁니다.")
 class MySqlAuthPersistenceTest(unittest.TestCase):
-    """실제 MySQL에서 가입 → 재로그인 → 조회가 유지되는지 확인합니다. 시험 DB에서만 실행하세요."""
+    """실제 MySQL 시험 DB에서 가입 → 재로그인 → 조회가 유지되는지 확인합니다."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.config = _prepare_mysql_test()
 
     def setUp(self):
-        self.app = create_app({"TESTING": True, "CHAGEUN_SERVER_MODE": True, "SECRET_KEY": TEST_SECRET})
+        self.app = create_app({"TESTING": True, "CHAGEUN_SERVER_MODE": True, "SECRET_KEY": TEST_SECRET, **self.config})
         self.client = self.app.test_client()
         self.username = f"tester_{secrets.token_hex(4)}"
         self.password = "correct-horse-battery"
 
     def tearDown(self):
-        config = self.app.config
-        conn = pymysql.connect(
-            host=config["MYSQL_HOST"],
-            port=config["MYSQL_PORT"],
-            user=config["MYSQL_USER"],
-            password=config["MYSQL_PASSWORD"],
-            database=config["MYSQL_DATABASE"],
-            charset="utf8mb4",
-        )
+        conn = _mysql_test_connect(self.config)
         try:
             with conn.cursor() as cursor:
                 cursor.execute("DELETE FROM users WHERE username = %s", (self.username,))
@@ -244,15 +329,13 @@ class MySqlAuthPersistenceTest(unittest.TestCase):
         return self.client.get("/api/auth/csrf").get_json()["data"]["csrf_token"]
 
     def test_register_login_me_persist_across_new_client(self):
-        token = self.csrf()
         register = self.client.post(
             "/api/auth/register",
             json={"username": self.username, "password": self.password},
-            headers={"X-CSRF-Token": token},
+            headers={"X-CSRF-Token": self.csrf()},
         )
         self.assertEqual(register.status_code, 201)
 
-        # 새 클라이언트(= 재로그인에 해당)에서 다시 로그인합니다.
         other = self.app.test_client()
         token = other.get("/api/auth/csrf").get_json()["data"]["csrf_token"]
         login = other.post(
@@ -264,6 +347,442 @@ class MySqlAuthPersistenceTest(unittest.TestCase):
         me = other.get("/api/auth/me")
         self.assertEqual(me.status_code, 200)
         self.assertEqual(me.get_json()["data"]["username"], self.username)
+
+
+class FakeVehicles:
+    """vehicles 테이블을 흉내 내는 메모리 저장소. owner_id UNIQUE(1062)와 소유자 조건을 MySQL처럼 지킵니다."""
+
+    def __init__(self):
+        self.rows = []
+        self.next_id = 1
+
+    @staticmethod
+    def _public(row):
+        return {key: row[key] for key in VEHICLE_FIELD_KEYS}
+
+    def create(self, owner_id, values):
+        if any(row["owner_id"] == owner_id for row in self.rows):
+            raise pymysql.err.IntegrityError(1062, "Duplicate entry for key 'uq_vehicles_owner'")
+        row = {key: values[key] for key in VEHICLE_FIELD_KEYS - {"id"}}
+        row["reference_date"] = date.fromisoformat(values["reference_date"]) if values["reference_date"] else None
+        row.update({"id": self.next_id, "owner_id": owner_id})
+        self.next_id += 1
+        self.rows.append(row)
+        return row["id"]
+
+    def by_owner(self, owner_id):
+        for row in self.rows:
+            if row["owner_id"] == owner_id:
+                return self._public(row)
+        return None
+
+    def by_id_and_owner(self, vehicle_id, owner_id):
+        for row in self.rows:
+            if row["id"] == vehicle_id and row["owner_id"] == owner_id:
+                return self._public(row)
+        return None
+
+
+class VehicleApiTest(unittest.TestCase):
+    def setUp(self):
+        self.users = FakeUsers()
+        self.vehicles = FakeVehicles()
+        self.db = mock.MagicMock()
+        mock.patch("chageun.api.users.create_user", side_effect=self.users.create).start()
+        mock.patch("chageun.api.users.find_user_by_username", side_effect=self.users.by_username).start()
+        mock.patch("chageun.api.users.find_user_by_id", side_effect=self.users.by_id).start()
+        mock.patch("chageun.api.vehicles.create_vehicle", side_effect=self.vehicles.create).start()
+        mock.patch("chageun.api.vehicles.find_vehicle_by_owner", side_effect=self.vehicles.by_owner).start()
+        mock.patch(
+            "chageun.api.vehicles.find_vehicle_by_id_and_owner", side_effect=self.vehicles.by_id_and_owner
+        ).start()
+        mock.patch("chageun.api.get_db", return_value=self.db).start()
+        self.addCleanup(mock.patch.stopall)
+
+        self.app = create_app({"TESTING": True, "CHAGEUN_SERVER_MODE": True, "SECRET_KEY": TEST_SECRET})
+        self.users.create("tester_a", generate_password_hash("correct-horse"))
+        self.users.create("tester_b", generate_password_hash("correct-horse"))
+        self.client_a = self.logged_in_client("tester_a")
+        self.client_b = self.logged_in_client("tester_b")
+
+    def logged_in_client(self, username, password="correct-horse"):
+        client = self.app.test_client()
+        token = client.get("/api/auth/csrf").get_json()["data"]["csrf_token"]
+        response = client.post(
+            "/api/auth/login",
+            json={"username": username, "password": password},
+            headers={"X-CSRF-Token": token},
+        )
+        self.assertEqual(response.status_code, 200)
+        return client
+
+    @staticmethod
+    def csrf(client):
+        return client.get("/api/auth/csrf").get_json()["data"]["csrf_token"]
+
+    def create(self, client, body=None):
+        payload = VALID_VEHICLE if body is None else body
+        return client.post("/api/vehicles", json=payload, headers={"X-CSRF-Token": self.csrf(client)})
+
+    def assert_error(self, response, status, code):
+        self.assertEqual(response.status_code, status)
+        body = response.get_json()
+        self.assertEqual(body["error"]["code"], code)
+        self.assertIsInstance(body["error"]["fields"], dict)
+        self.assertEqual(body["meta"]["contract_version"], "1.0")
+        return body
+
+    def test_protected_routes_without_login_are_401(self):
+        anonymous = self.app.test_client()
+        self.assert_error(anonymous.get("/api/vehicles"), 401, "AUTH_REQUIRED")
+        self.assert_error(anonymous.get("/api/vehicles/1"), 401, "AUTH_REQUIRED")
+        # 미로그인이면 CSRF 토큰이 없어도 401이 먼저 나옵니다.
+        self.assert_error(anonymous.post("/api/vehicles", json=VALID_VEHICLE), 401, "AUTH_REQUIRED")
+        self.assert_error(
+            anonymous.post("/api/vehicles", json=VALID_VEHICLE, headers={"X-CSRF-Token": self.csrf(anonymous)}),
+            401,
+            "AUTH_REQUIRED",
+        )
+        self.assertEqual(self.vehicles.rows, [])
+
+    def test_post_without_csrf_is_403_and_creates_nothing(self):
+        response = self.client_a.post("/api/vehicles", json=VALID_VEHICLE)
+        self.assert_error(response, 403, "CSRF_FAILED")
+        self.assert_error(
+            self.client_a.post("/api/vehicles", json=VALID_VEHICLE, headers={"X-CSRF-Token": "wrong"}),
+            403,
+            "CSRF_FAILED",
+        )
+        self.assertEqual(self.vehicles.rows, [])
+
+    def test_post_creates_vehicle_and_responds_with_db_values_201(self):
+        response = self.create(self.client_a)
+        self.assertEqual(response.status_code, 201)
+        body = response.get_json()
+        self.assertEqual(body["meta"]["contract_version"], "1.0")
+        self.assertEqual(set(body["data"]), VEHICLE_FIELD_KEYS)
+        self.assertEqual(body["data"], {"id": 1, **VALID_VEHICLE})
+        self.assertNotIn("owner_id", body["data"])
+
+    def test_response_never_exposes_owner_id(self):
+        self.create(self.client_a)
+        for response in [self.client_a.get("/api/vehicles"), self.client_a.get("/api/vehicles/1")]:
+            self.assertNotIn("owner_id", response.get_data(as_text=True))
+
+    def test_null_and_zero_are_kept_distinct(self):
+        self.create(self.client_a, {"manufacturer": "기아", "model": "K5", "mileage": 0, "reference_date": None})
+        data = self.client_a.get("/api/vehicles/1").get_json()["data"]
+        self.assertEqual(data["mileage"], 0)
+        self.assertIsNone(data["reference_date"])
+
+        self.vehicles.rows.clear()
+        self.vehicles.next_id = 1
+        self.create(self.client_a, {"manufacturer": "기아", "model": "K5"})
+        data = self.client_a.get("/api/vehicles/1").get_json()["data"]
+        self.assertIsNone(data["mileage"])
+        self.assertIsNone(data["reference_date"])
+        self.assertEqual(data["conditions"], "unknown")
+
+    def test_second_vehicle_for_same_account_is_409(self):
+        self.assertEqual(self.create(self.client_a).status_code, 201)
+        self.assert_error(self.create(self.client_a, {"manufacturer": "기아", "model": "K5"}), 409, "CONFLICT")
+        listing = self.client_a.get("/api/vehicles").get_json()["data"]
+        self.assertEqual(len(listing), 1)
+
+    def test_duplicate_from_db_race_is_409_and_rolled_back(self):
+        with mock.patch("chageun.api.vehicles.find_vehicle_by_owner", return_value=None), mock.patch(
+            "chageun.api.vehicles.create_vehicle",
+            side_effect=pymysql.err.IntegrityError(1062, "Duplicate entry for key 'uq_vehicles_owner'"),
+        ):
+            response = self.create(self.client_a)
+        self.assert_error(response, 409, "CONFLICT")
+        self.db.rollback.assert_called()
+
+    def test_list_returns_own_vehicle_or_empty_list(self):
+        self.assertEqual(self.client_a.get("/api/vehicles").get_json()["data"], [])
+        self.create(self.client_a)
+        listing = self.client_a.get("/api/vehicles")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.get_json()["data"], [{"id": 1, **VALID_VEHICLE}])
+        self.assertEqual(listing.get_json()["meta"]["contract_version"], "1.0")
+
+    def test_get_own_vehicle_is_200(self):
+        self.create(self.client_a)
+        response = self.client_a.get("/api/vehicles/1")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["data"], {"id": 1, **VALID_VEHICLE})
+
+    def test_other_accounts_vehicle_is_404_same_as_missing(self):
+        self.create(self.client_a)
+        other_account = self.client_b.get("/api/vehicles/1")
+        missing = self.client_b.get("/api/vehicles/999")
+        self.assert_error(other_account, 404, "NOT_FOUND")
+        self.assert_error(missing, 404, "NOT_FOUND")
+        self.assertEqual(other_account.get_json()["error"]["message"], missing.get_json()["error"]["message"])
+        self.assertEqual(self.client_b.get("/api/vehicles").get_json()["data"], [])
+
+    def test_validation_rejects_bad_input_and_stores_nothing(self):
+        cases = [
+            [],
+            {"owner_id": 2},
+            {"generation": "XX"},
+            {"generation": ["JF"]},
+            {"year": 1899},
+            {"year": 2036},
+            {"year": True},
+            {"year": "2017"},
+            {"mileage": -1},
+            {"mileage": 1000001},
+            {"mileage": "0"},
+            {"mileage": 1.5},
+            {"mileage": False},
+            {"reference_date": "2026/10/01"},
+            {"reference_date": "20261001"},
+            {"reference_date": "2026-13-01"},
+            {"reference_date": "2026-02-30"},
+            {"reference_date": 20261001},
+            {"conditions": "broken"},
+            {"conditions": None},
+            {"manufacturer": ""},
+            {"manufacturer": "   "},
+            {"manufacturer": "가" * 41},
+            {"engine": 1600},
+            {"fuel": "x" * 31},
+        ]
+        for body in cases:
+            with self.subTest(body=body):
+                response = self.create(self.client_a, body)
+                if isinstance(body, list):
+                    self.assert_error(response, 400, "VALIDATION_ERROR")
+                else:
+                    error = self.assert_error(response, 400, "VALIDATION_ERROR")
+                    self.assertTrue(error["error"]["fields"])
+        self.assertEqual(self.vehicles.rows, [])
+
+    def test_empty_or_missing_identity_is_400_and_creates_nothing(self):
+        cases = [
+            {},
+            {"manufacturer": "현대"},
+            {"model": "아반떼"},
+            {"manufacturer": None, "model": "아반떼"},
+            {"manufacturer": "현대", "model": None},
+            {"manufacturer": "", "model": "아반떼"},
+        ]
+        for body in cases:
+            with self.subTest(body=body):
+                error = self.assert_error(self.create(self.client_a, body), 400, "VALIDATION_ERROR")
+                self.assertTrue(error["error"]["fields"])
+        self.assertEqual(self.vehicles.rows, [])
+        self.assertEqual(self.client_a.get("/api/vehicles").get_json()["data"], [])
+
+    def test_empty_body_reports_required_fields(self):
+        error = self.assert_error(self.create(self.client_a, {}), 400, "VALIDATION_ERROR")
+        self.assertEqual(set(error["error"]["fields"]), {"manufacturer", "model"})
+
+    def test_blank_strings_are_400_and_null_is_the_way_to_say_unknown(self):
+        blanks = {
+            "manufacturer": "현대",
+            "model": "아반떼",
+            "engine": "",
+            "fuel": "   ",
+            "transmission": "",
+            "generation": "",
+            "year": "",
+            "mileage": "",
+            "reference_date": "",
+            "conditions": "",
+        }
+        error = self.assert_error(self.create(self.client_a, blanks), 400, "VALIDATION_ERROR")
+        self.assertEqual(
+            set(error["error"]["fields"]),
+            {"engine", "fuel", "transmission", "generation", "year", "mileage", "reference_date", "conditions"},
+        )
+        for message in error["error"]["fields"].values():
+            self.assertIn("null", message)
+        self.assertEqual(self.vehicles.rows, [])
+
+        # 같은 입력을 모르는 값으로 보내면(null, 차종은 unknown) 등록됩니다.
+        unknowns = {
+            "manufacturer": "현대",
+            "model": "아반떼",
+            "engine": None,
+            "fuel": None,
+            "transmission": None,
+            "generation": None,
+            "year": None,
+            "mileage": None,
+            "reference_date": None,
+            "conditions": "unknown",
+        }
+        self.assertEqual(self.create(self.client_a, unknowns).status_code, 201)
+        data = self.client_a.get("/api/vehicles/1").get_json()["data"]
+        self.assertIsNone(data["mileage"])
+        self.assertIsNone(data["reference_date"])
+        self.assertEqual(data["conditions"], "unknown")
+
+    def test_blank_required_field_is_400_with_required_guidance(self):
+        error = self.assert_error(
+            self.create(self.client_a, {"manufacturer": "  ", "model": "아반떼"}), 400, "VALIDATION_ERROR"
+        )
+        self.assertIn("manufacturer", error["error"]["fields"])
+        self.assertIn("null", error["error"]["fields"]["manufacturer"])
+        self.assertEqual(self.vehicles.rows, [])
+
+    def test_boundary_values_are_accepted(self):
+        body = {
+            "manufacturer": "현대",
+            "model": "포터",
+            "generation": "DL3",
+            "year": 1900,
+            "mileage": 1000000,
+            "reference_date": "2024-02-29",
+            "conditions": "severe",
+        }
+        self.assertEqual(self.create(self.client_a, body).status_code, 201)
+        data = self.client_a.get("/api/vehicles/1").get_json()["data"]
+        self.assertEqual(data["year"], 1900)
+        self.assertEqual(data["mileage"], 1000000)
+        self.assertEqual(data["reference_date"], "2024-02-29")
+        self.assertEqual(data["conditions"], "severe")
+
+    def test_database_error_is_500_and_hides_details(self):
+        with mock.patch(
+            "chageun.api.vehicles.create_vehicle",
+            side_effect=pymysql.err.OperationalError(2013, "Lost connection password=super-secret-value"),
+        ):
+            response = self.create(self.client_a)
+        self.assert_error(response, 500, "INTERNAL_ERROR")
+        text = response.get_data(as_text=True)
+        self.assertNotIn("super-secret-value", text)
+        self.assertNotIn("MySQL", text)
+        self.db.rollback.assert_called()
+
+
+@unittest.skipUnless(MYSQL_TESTS_ENABLED, "시험 MySQL 확인 환경변수가 없어 실제 DB 시험을 건너뜁니다.")
+class MySqlVehiclePersistenceTest(unittest.TestCase):
+    """실제 MySQL 시험 DB에서 차량 저장 → 재로그인 → 재조회 → 중복 등록 거부가 유지되는지 확인합니다."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.config = _prepare_mysql_test()
+
+    def setUp(self):
+        self.app = create_app({"TESTING": True, "CHAGEUN_SERVER_MODE": True, "SECRET_KEY": TEST_SECRET, **self.config})
+        self.usernames = []
+
+    def tearDown(self):
+        # vehicles는 users 삭제 시 CASCADE로 함께 지워집니다.
+        conn = _mysql_test_connect(self.config)
+        try:
+            with conn.cursor() as cursor:
+                for username in self.usernames:
+                    cursor.execute("DELETE FROM users WHERE username = %s", (username,))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def new_account(self):
+        username = f"tester_{secrets.token_hex(4)}"
+        self.usernames.append(username)
+        client = self.app.test_client()
+        token = client.get("/api/auth/csrf").get_json()["data"]["csrf_token"]
+        register = client.post(
+            "/api/auth/register",
+            json={"username": username, "password": "correct-horse-battery"},
+            headers={"X-CSRF-Token": token},
+        )
+        self.assertEqual(register.status_code, 201)
+        return username
+
+    def login(self, username):
+        client = self.app.test_client()
+        token = client.get("/api/auth/csrf").get_json()["data"]["csrf_token"]
+        response = client.post(
+            "/api/auth/login",
+            json={"username": username, "password": "correct-horse-battery"},
+            headers={"X-CSRF-Token": token},
+        )
+        self.assertEqual(response.status_code, 200)
+        return client
+
+    def test_vehicle_saved_then_reread_after_relogin_and_duplicate_rejected(self):
+        username = self.new_account()
+        first = self.login(username)
+        created = first.post(
+            "/api/vehicles",
+            json=VALID_VEHICLE,
+            headers={"X-CSRF-Token": first.get("/api/auth/csrf").get_json()["data"]["csrf_token"]},
+        )
+        self.assertEqual(created.status_code, 201)
+        vehicle_id = created.get_json()["data"]["id"]
+
+        # 새 클라이언트(재로그인)에서 DB에 저장된 값을 다시 읽습니다.
+        second = self.login(username)
+        self.assertEqual(second.get("/api/vehicles").get_json()["data"], [{"id": vehicle_id, **VALID_VEHICLE}])
+        detail = second.get(f"/api/vehicles/{vehicle_id}").get_json()["data"]
+        self.assertEqual(detail, {"id": vehicle_id, **VALID_VEHICLE})
+        self.assertEqual(detail["mileage"], 0)
+        self.assertEqual(detail["reference_date"], "2026-10-01")
+
+        duplicate = second.post(
+            "/api/vehicles",
+            json={"manufacturer": "기아", "model": "K5"},
+            headers={"X-CSRF-Token": second.get("/api/auth/csrf").get_json()["data"]["csrf_token"]},
+        )
+        self.assertEqual(duplicate.status_code, 409)
+        self.assertEqual(duplicate.get_json()["error"]["code"], "CONFLICT")
+
+    def test_null_mileage_and_date_persist_as_null(self):
+        username = self.new_account()
+        client = self.login(username)
+        body = {"manufacturer": "기아", "model": "K5", "mileage": None, "reference_date": None}
+        created = client.post(
+            "/api/vehicles",
+            json=body,
+            headers={"X-CSRF-Token": client.get("/api/auth/csrf").get_json()["data"]["csrf_token"]},
+        )
+        self.assertEqual(created.status_code, 201)
+        reloaded = self.login(username).get(f"/api/vehicles/{created.get_json()['data']['id']}").get_json()["data"]
+        self.assertIsNone(reloaded["mileage"])
+        self.assertIsNone(reloaded["reference_date"])
+        self.assertEqual(reloaded["conditions"], "unknown")
+
+
+class MySqlTestGuardTest(unittest.TestCase):
+    """실제 DB 없이 시험 DB 가드 규칙만 검사합니다."""
+
+    def env(self, **overrides):
+        base = {"CHAGEUN_TEST_MYSQL_CONFIRM": MYSQL_TEST_CONFIRM, "CHAGEUN_TEST_MYSQL_DATABASE": "chageun_test"}
+        base.update(overrides)
+        return mock.patch.dict(os.environ, base, clear=False)
+
+    def test_accepted_names(self):
+        for name in ["chageun_test", "chageun_test_a1", "chageun_test_ci2"]:
+            with self.subTest(name=name), self.env(CHAGEUN_TEST_MYSQL_DATABASE=name):
+                self.assertEqual(_mysql_test_config()["MYSQL_DATABASE"], name)
+
+    def test_rejected_names(self):
+        bad = [
+            "chageun",
+            "chageun_prod",
+            "test",
+            "prod_test",
+            "chageun_test_",
+            "chageun_test_PROD",
+            "chageun_test; DROP DATABASE chageun",
+            "chageun_test_x_very_long_suffix_over_limit",
+            "",
+        ]
+        for name in bad:
+            with self.subTest(name=name), self.env(CHAGEUN_TEST_MYSQL_DATABASE=name):
+                with self.assertRaises(RuntimeError):
+                    _mysql_test_config()
+
+    def test_confirm_flag_is_required_for_db_tests(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(os.environ.get("CHAGEUN_TEST_MYSQL_CONFIRM") == MYSQL_TEST_CONFIRM)
+        with mock.patch.dict(os.environ, {"CHAGEUN_TEST_MYSQL_CONFIRM": "yes"}, clear=True):
+            self.assertFalse(os.environ.get("CHAGEUN_TEST_MYSQL_CONFIRM") == MYSQL_TEST_CONFIRM)
 
 
 if __name__ == "__main__":
