@@ -27,6 +27,8 @@ DUPLICATE_KEY_ERROR = 1062
 
 # 차량 입력 규칙은 schema.sql의 vehicles 제약과 맞춥니다.
 VEHICLE_TEXT_LIMITS = {"manufacturer": 40, "model": 40, "engine": 60, "fuel": 30, "transmission": 40}
+# 최소 식별 입력: 제조사와 모델이 있어야 등록할 수 있습니다. 차량 수정 API는 아직 없으므로 빈 차량을 허용하지 않습니다.
+VEHICLE_REQUIRED_TEXT = {"manufacturer", "model"}
 VEHICLE_GENERATIONS = {"DL3", "JF"}
 VEHICLE_CONDITIONS = {"normal", "severe", "unknown"}
 VEHICLE_FIELDS = set(VEHICLE_TEXT_LIMITS) | {"generation", "year", "mileage", "reference_date", "conditions"}
@@ -205,8 +207,8 @@ def _is_int(value):
 
 
 def _vehicle_values(body):
-    """차량 입력을 검증해 DB에 넣을 값을 돌려줍니다. 미입력(키 없음)과 null은 '값 없음'으로 같게 저장하되,
-    주행거리 0과 null, 날짜 값과 null은 서로 다른 값으로 보존합니다."""
+    """차량 입력을 검증해 DB에 넣을 값을 돌려줍니다. 선택 항목의 미입력(키 없음)과 null은 '값 없음'으로 저장하고,
+    주행거리 0과 null, 날짜 값과 null은 서로 다른 값으로 보존합니다. 제조사·모델은 필수입니다."""
     fields = {}
     for key in set(body) - VEHICLE_FIELDS:
         fields[key] = "허용되지 않은 필드입니다."
@@ -215,7 +217,9 @@ def _vehicle_values(body):
 
     for key, limit in VEHICLE_TEXT_LIMITS.items():
         value = body.get(key)
-        if value is None:
+        if value is None and key in VEHICLE_REQUIRED_TEXT:
+            fields[key] = "필수 입력 항목입니다."
+        elif value is None:
             values[key] = None
         elif isinstance(value, str) and 1 <= len(value.strip()) <= limit:
             values[key] = value.strip()
