@@ -7,6 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <title>{{ title }} · 차근</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v='20261006-records-v4') }}">
+  <script src="{{ url_for('static', filename='js/api-client.js', v='20261010-api-v1') }}" defer></script>
   <script src="{{ url_for('static', filename='js/app.js', v='20261006-records-v4') }}" defer></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/webapp.css', v='20261007-responsive') }}">
   <script src="{{ url_for('static', filename='js/navigation.js', v='20261007-responsive') }}" defer></script>
@@ -38,7 +39,7 @@
         </details>
       </header>
       <main id="main" tabindex="-1">
-        <div class="prototype-notice" role="note"><strong>개발 진행 중</strong><span>차량 정보는 현재 브라우저에만 저장됩니다. 로그인·서버 DB·실제 기준 계산은 아직 연결되지 않았습니다.</span></div>
+        <div class="prototype-notice" role="note"><strong>개발 진행 중</strong><span>차량·기록은 가상(mock) 응답으로 동작합니다. 서버 DB·로그인·실제 기준 계산은 아직 연결되지 않았습니다.</span></div>
         {% block content %}{% endblock %}
       </main>
       <footer class="page-footer">차근은 관리 이력과 기준을 바탕으로 확인할 항목을 안내합니다. 실제 부품 상태와 필요한 작업은 정비 점검으로 확인합니다.</footer>
