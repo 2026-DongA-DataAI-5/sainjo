@@ -142,13 +142,71 @@ class ManagementEngineTests(unittest.TestCase):
                 self.assertIsNone(result["next_mileage"])
                 self.assertIsNone(result["next_date"])
 
-    def test_wrong_generation_engine_or_year_is_unsupported(self):
-        for field, value in (("generation", "JF"), ("engine", "1.6 T-GDI"), ("year", 2024)):
+    def test_wrong_supported_vehicle_specs_are_unsupported(self):
+        mismatches = (
+            ("manufacturer", "현대"),
+            ("model", "쏘렌토"),
+            ("generation", "JF"),
+            ("year", 2024),
+            ("engine", "1.6 T-GDI"),
+            ("fuel", "디젤"),
+            ("transmission", "수동"),
+        )
+        for field, value in mismatches:
             with self.subTest(field=field):
                 vehicle = copy.deepcopy(self.case["input"]["vehicle"])
                 vehicle[field] = value
                 result = self.evaluate(vehicle=vehicle)
                 self.assertEqual(result["timing_status"], "unsupported")
+                self.assertEqual(result["missing_fields"], [])
+                self.assertIsNone(result["next_mileage"])
+                self.assertIsNone(result["next_date"])
+
+    def test_missing_vehicle_applicability_fields_are_unknown(self):
+        fields = (
+            "manufacturer",
+            "model",
+            "generation",
+            "year",
+            "engine",
+            "fuel",
+            "transmission",
+        )
+        for field in fields:
+            for omit_field in (False, True):
+                with self.subTest(field=field, omit_field=omit_field):
+                    vehicle = copy.deepcopy(self.case["input"]["vehicle"])
+                    if omit_field:
+                        vehicle.pop(field)
+                    else:
+                        vehicle[field] = None
+
+                    result = self.evaluate(vehicle=vehicle)
+
+                    self.assertEqual(result["timing_status"], "unknown")
+                    self.assertIn(f"vehicle.{field}", result["missing_fields"])
+                    self.assertIsNone(result["next_mileage"])
+                    self.assertIsNone(result["next_date"])
+
+    def test_missing_rule_applicability_fields_are_unknown(self):
+        fields = (
+            "manufacturer",
+            "model",
+            "generation",
+            "years",
+            "engine",
+            "fuel",
+            "transmission",
+        )
+        for field in fields:
+            with self.subTest(field=field):
+                rule = copy.deepcopy(self.case["input"]["rule"])
+                rule["applicability"].pop(field)
+
+                result = self.evaluate(rule=rule)
+
+                self.assertEqual(result["timing_status"], "unknown")
+                self.assertIn(f"rule.applicability.{field}", result["missing_fields"])
                 self.assertIsNone(result["next_mileage"])
                 self.assertIsNone(result["next_date"])
 

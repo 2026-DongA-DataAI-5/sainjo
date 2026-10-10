@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from calendar import monthrange
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 
 
 ITEM_KEY = "engine-oil"
@@ -27,6 +27,7 @@ _APPLICABILITY_FIELDS = (
     "transmission",
 )
 _MILEAGE_LIMIT = 1_000_000
+_ApplicabilityStatus = Literal["supported", "unsupported", "unknown"]
 
 
 def _parse_iso_date(value: Any) -> date | None:
@@ -196,10 +197,10 @@ def _latest_replacement(
 
 def _applicability(
     vehicle: dict[str, Any], rule: dict[str, Any]
-) -> tuple[bool, list[str], list[str]]:
+) -> tuple[_ApplicabilityStatus, list[str], list[str]]:
     applicability = rule.get("applicability")
     if not isinstance(applicability, dict):
-        return False, ["관리 기준의 적용 사양이 없어 계산할 수 없습니다"], ["rule.applicability"]
+        return "unknown", ["관리 기준의 적용 사양이 없어 계산할 수 없습니다"], ["rule.applicability"]
 
     missing: list[str] = []
     mismatched: list[str] = []
@@ -224,10 +225,10 @@ def _applicability(
 
     if mismatched:
         detail = ", ".join(mismatched)
-        return False, [f"차량 사양({detail})이 기준 적용 대상과 다릅니다"], missing
+        return "unsupported", [f"차량 사양({detail})이 기준 적용 대상과 다릅니다"], missing
     if missing:
-        return False, ["차량 사양 또는 기준 적용 범위가 확인되지 않았습니다"], missing
-    return True, [], []
+        return "unknown", ["차량 사양 또는 기준 적용 범위가 확인되지 않았습니다"], missing
+    return "supported", [], []
 
 
 def evaluate_management(
@@ -316,12 +317,11 @@ def evaluate_management(
             missing_fields=[],
         )
 
-    supported, reasons, missing = _applicability(vehicle, rule)
-    if not supported:
-        mismatched = any("다릅니다" in reason for reason in reasons)
+    applicability_status, reasons, missing = _applicability(vehicle, rule)
+    if applicability_status != "supported":
         return _finish(
             item,
-            timing_status="unsupported" if mismatched else "unknown",
+            timing_status=applicability_status,
             reasons=reasons,
             missing_fields=missing,
         )
