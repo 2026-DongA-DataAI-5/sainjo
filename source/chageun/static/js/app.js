@@ -310,10 +310,78 @@
     summary.querySelector('[data-vehicle-date]').textContent = '확인 불가';
   }
 
+  // ───────────────────────── 대시보드 로그인 상태 (서버 모드) ─────────────────────────
+  // 서버 모드에서만 /api/auth/me를 호출합니다. 공개 정보인 아이디만 표시하고, 아이디·비밀번호는 저장소나 로그에 남기지 않습니다.
+  // 차량·기록 API는 아직 서버에 없으므로 서버 모드에서는 불러오지 않고 "아직 연결되지 않음"으로 표시합니다.
+  function showVehicleNotConnected(summary, list) {
+    if (summary) {
+      summary.querySelector('[data-vehicle-label]').textContent = '서버 연결 전';
+      summary.querySelector('[data-vehicle-name]').textContent = '차량 정보는 아직 서버에 연결되지 않았습니다';
+      summary.querySelector('[data-vehicle-spec]').textContent = '';
+      summary.querySelector('[data-vehicle-mileage]').textContent = '확인 불가';
+      summary.querySelector('[data-vehicle-date]').textContent = '확인 불가';
+    }
+    if (list) {
+      list.replaceChildren();
+      appendText(list, 'p', 'muted', '관리 기록은 아직 서버에 연결되지 않았습니다.');
+    }
+  }
+
+  function redirectToExpiredLogin() {
+    window.location.assign(appPath('/login?expired=1'));
+  }
+
+  async function initAccountStatus(box) {
+    const message = box.querySelector('[data-account-message]');
+    const userRow = box.querySelector('[data-account-user]');
+    const usernameText = box.querySelector('[data-account-username]');
+    const logoutButton = box.querySelector('[data-logout]');
+    box.hidden = false;
+    showMessage(message, '로그인 상태를 확인하는 중입니다.');
+    try {
+      const body = await api.auth.me();
+      usernameText.textContent = body.data.username;
+      userRow.hidden = false;
+      showMessage(message, '');
+      logoutButton.hidden = false;
+      logoutButton.addEventListener('click', async () => {
+        logoutButton.disabled = true;
+        showMessage(message, '로그아웃하는 중입니다.');
+        try {
+          await api.auth.logout();
+          window.location.assign(appPath('/login'));
+        } catch (error) {
+          if (error && error.status === 401) {
+            redirectToExpiredLogin();
+            return;
+          }
+          logoutButton.disabled = false;
+          showMessage(message, '로그아웃하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+        }
+      });
+    } catch (error) {
+      if (error && error.status === 401) {
+        // 로그인되지 않았거나 세션이 만료된 상태입니다. 로그인 화면에서 만료 안내를 보여 줍니다.
+        showMessage(message, '로그인이 필요합니다. 로그인 화면으로 이동합니다.');
+        redirectToExpiredLogin();
+        return;
+      }
+      userRow.hidden = true;
+      const offline = error && error.status === 0;
+      showMessage(message, offline ? '서버에 연결하지 못해 로그인 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.' : '서버 오류로 로그인 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    }
+  }
+
   async function initDashboard() {
     const summary = document.querySelector('[data-vehicle-summary]');
     const list = document.querySelector('[data-dashboard-records]');
     let summaryReady = false;
+    if (api.mode === 'live') {
+      const accountBox = document.querySelector('[data-account-status]');
+      if (accountBox) initAccountStatus(accountBox);
+      showVehicleNotConnected(summary, list);
+      return;
+    }
     try {
       const vehicle = await loadVehicle();
       if (summary) renderVehicleSummary(summary, vehicle);

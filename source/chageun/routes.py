@@ -43,7 +43,7 @@ def start():
 
 @pages.get("/dashboard")
 def dashboard():
-    return render_template("dashboard.html", title="관리 대시보드", items=DEMO_ITEMS)
+    return render_template("dashboard.html", title="관리 대시보드", items=DEMO_ITEMS, api_mode=_auth_api_mode())
 
 
 @pages.get("/vehicle")
