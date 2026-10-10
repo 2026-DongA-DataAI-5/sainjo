@@ -301,12 +301,23 @@
     summary.querySelector('[data-vehicle-date]').textContent = textOrUnknown(vehicle ? vehicle.reference_date : null);
   }
 
+  // 차량 조회가 실패하면 요약 영역도 오류 상태로 바꿔, "불러오는 중"이 계속 남지 않게 합니다.
+  function renderVehicleError(summary, error) {
+    summary.querySelector('[data-vehicle-label]').textContent = '차량 정보 오류';
+    summary.querySelector('[data-vehicle-name]').textContent = '차량 정보를 불러오지 못했습니다';
+    summary.querySelector('[data-vehicle-spec]').textContent = errorText(error);
+    summary.querySelector('[data-vehicle-mileage]').textContent = '확인 불가';
+    summary.querySelector('[data-vehicle-date]').textContent = '확인 불가';
+  }
+
   async function initDashboard() {
     const summary = document.querySelector('[data-vehicle-summary]');
     const list = document.querySelector('[data-dashboard-records]');
+    let summaryReady = false;
     try {
       const vehicle = await loadVehicle();
       if (summary) renderVehicleSummary(summary, vehicle);
+      summaryReady = true;
       if (list) {
         list.replaceChildren();
         const records = vehicle ? await loadRecords(vehicle.id) : [];
@@ -328,6 +339,7 @@
         }
       }
     } catch (error) {
+      if (summary && !summaryReady) renderVehicleError(summary, error);
       if (list) {
         list.replaceChildren();
         appendText(list, 'p', 'muted', errorText(error));
