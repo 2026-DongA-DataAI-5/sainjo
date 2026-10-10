@@ -72,36 +72,35 @@
     return detail ? `${base} ${detail}` : base;
   }
 
-  function setBusy(button, busy, label) {
-    if (!button) return;
-    if (busy) {
-      button.dataset.idleLabel = button.textContent;
-      button.textContent = label;
-      button.disabled = true;
-    } else {
-      button.textContent = button.dataset.idleLabel || button.textContent;
-      button.disabled = false;
-    }
+  // 저장 중에는 버튼 글자를 바꾸지 않고 잠급니다(글자가 바뀌면 버튼 폭이 달라져 옆 링크가 밀려 올라옵니다).
+  // 같은 화면의 링크도 저장이 끝날 때까지 누를 수 없게 막습니다.
+  function lockForm(form, locked) {
+    const button = form.querySelector('button[type="submit"]');
+    if (button) button.disabled = locked;
+    form.querySelectorAll('.form-actions a').forEach((link) => {
+      link.style.pointerEvents = locked ? 'none' : '';
+      link.setAttribute('aria-disabled', String(locked));
+    });
+    form.setAttribute('aria-busy', String(locked));
   }
 
-  // 제출 버튼을 잠그고 한 번에 한 요청만 보냅니다. 실패하면 입력은 그대로 남깁니다.
+  // 한 번에 한 요청만 보냅니다. 실패하면 입력은 그대로 남깁니다.
   function guardedSubmit(form, handler) {
     let busy = false;
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (busy) return;
       busy = true;
-      const button = form.querySelector('button[type="submit"]');
       const message = form.querySelector('.form-message');
-      setBusy(button, true, '저장 중…');
-      showMessage(message, '');
+      lockForm(form, true);
+      showMessage(message, '저장 중입니다. 잠시만 기다려 주세요.');
       try {
         await handler();
       } catch (error) {
         showMessage(message, errorText(error));
       } finally {
         busy = false;
-        setBusy(button, false);
+        lockForm(form, false);
       }
     });
   }
@@ -218,7 +217,7 @@
       removeButton.focus();
     });
     confirmButton.addEventListener('click', async () => {
-      setBusy(confirmButton, true, '삭제 중…');
+      confirmButton.disabled = true;
       cancelButton.disabled = true;
       try {
         await api.records.remove(record.id);
@@ -226,7 +225,7 @@
       } catch (error) {
         // 삭제 실패 시 항목은 그대로 둡니다. 응답을 못 받았다면 목록을 다시 불러옵니다.
         showMessage(status, errorText(error));
-        setBusy(confirmButton, false);
+        confirmButton.disabled = false;
         cancelButton.disabled = false;
         if (error && error.uncertain) onChanged();
       }
