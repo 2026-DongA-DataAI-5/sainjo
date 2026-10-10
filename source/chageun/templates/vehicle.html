@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">차량과 적용 대상</p><h1>차량 정보를 확인해 주세요</h1><p class="lede">K5 JF와 DL3는 다른 세대입니다. 모르는 사양은 미확인으로 남기고, 이 정보만으로 관리 기준을 계산하지 않습니다.</p></div></div>
+<form class="form-panel preview-form" id="vehicle-form"><div class="section-heading"><h2>아는 정보만 입력</h2><span class="badge unknown" data-save-status>가상 저장(mock)</span></div><div class="form-grid">
+<div><label for="manufacturer">제조사</label><input id="manufacturer" name="manufacturer" maxlength="40" placeholder="예: 기아"></div>
+<div><label for="model">모델</label><input id="model" name="model" maxlength="40" placeholder="예: K5"></div>
+<div><label for="generation">세대·모델코드</label><select id="generation" name="generation"><option value="unknown">미확인</option><option value="DL3">DL3</option><option value="JF">JF</option></select></div>
+<div><label for="model-year">연식</label><input id="model-year" name="year" type="number" min="1900" max="2035" step="1" placeholder="예: 2021"></div>
+<div><label for="engine">엔진·파워트레인</label><input id="engine" name="engine" maxlength="60" placeholder="모르면 비워 두세요"></div>
+<div><label for="fuel">연료</label><input id="fuel" name="fuel" maxlength="30" placeholder="모르면 비워 두세요"></div>
+<div><label for="transmission">변속기</label><input id="transmission" name="transmission" maxlength="40" placeholder="모르면 비워 두세요"></div>
+<div><label for="mileage">현재 주행거리 km</label><input id="mileage" name="mileage" type="number" min="0" max="1000000" step="1" placeholder="예: 70000"></div>
+<div><label for="reference-date">주행거리 측정 기준일</label><input id="reference-date" name="reference_date" type="date"></div>
+</div><fieldset><legend>운행조건</legend><p class="muted">제조사 원문에 따른 실제 운행조건 판정은 아직 연결하지 않았습니다.</p><label class="choice"><input type="radio" name="conditions" value="unknown" checked>미확인</label></fieldset><p class="form-message" role="status" aria-live="polite"></p><div class="form-actions"><button class="button primary" type="submit">차량 정보 저장하고 대시보드 보기</button><a class="button secondary" href="{{ url_for('pages.dashboard') }}">대시보드 예시 보기</a></div><p class="muted">지금은 가상(mock) 응답으로 저장합니다. 서버 DB·로그인·실제 차량별 관리기준 계산은 아직 없습니다. 탭을 닫으면 mock 자료는 사라집니다.</p></form>
+{% endblock %}
