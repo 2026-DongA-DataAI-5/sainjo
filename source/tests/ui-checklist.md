@@ -78,3 +78,47 @@
 
 ## 관리 판단에 대해
 - 이 변경은 관리 판단(교환 시기 계산)을 추가하지 않습니다. 관리 안내 화면은 기존 샘플 그대로이며 가상 예시라고 표시되어 있습니다.
+
+---
+
+# 로그인·회원가입 화면 검수 결과 (auth-ui)
+
+- 작성일: 2026-10-10
+- 대상 브랜치: feature/auth-ui (main 263fa80 기준)
+- 실행 환경: Python 3.13 + Flask 3.1.3, 헤드리스 Chromium, 화면 폭 390px
+- 변경 파일: `chageun/routes.py`(`/login`, `/register`), `chageun/templates/auth.html`(신규), `chageun/templates/base.html`(`data-api-mode`), `chageun/static/js/app.js`(`initAuthForm`)
+- `api-client.js`는 수정하지 않고 기존 `ChageunApi.auth.*`를 그대로 사용
+
+## 실행 방법
+1. mock 모드: `source` 폴더에서 `python app.py` 실행 후 `http://127.0.0.1:8081/login`, `/register` 열기 (서버 모드 환경변수 없음 → `data-api-mode="mock"`)
+2. live 모드: `CHAGEUN_SERVER_MODE=1`, `CHAGEUN_SECRET_KEY=<임의 값>`을 설정하고 MySQL을 연결한 뒤 실행 (DB 없이 실행하면 가입·로그인은 서버 오류 응답만 확인됩니다)
+
+## 실제 실행 결과
+| 구분 | 항목 | 결과 | 비고 |
+|---|---|---|---|
+| mock | 로그인 화면 제목·가상(mock) 안내, `data-api-mode=mock`, 비밀번호 칸 `type=password` | 통과 | |
+| mock | 가입 입력 오류: 아이디·비밀번호 필드 오류, 아이디 입력값 유지 | 통과 | |
+| mock | 중복 아이디(409 강제 주입): 아이디 필드·상태 메시지, 입력 유지, 버튼 재사용 가능 | 통과 | mock은 중복 검사를 하지 않아 `failNext(409)`로만 확인 |
+| mock | 가입 성공: "실제 계정은 만들어지지 않았습니다" 안내, 비밀번호 칸 비움 | 통과 | |
+| mock | 로그인 401·500: 오류 문구, 아이디 유지 | 통과 | |
+| mock | 제출 중 버튼·폼 잠금(`aria-busy`) | 통과 | |
+| mock | 세션 만료 안내(`/login?expired=1`) | 통과 | |
+| mock | 로그인 성공 → `/dashboard` 이동, 저장소에 비밀번호 없음, 사용자 정보만 저장 | 통과 | |
+| mock | 390px `/login`, `/register` 가로 넘침 없음 | 통과 | overflow=0px |
+| mock | 페이지 스크립트 오류 없음 | 통과 | |
+| live | `data-api-mode=live` (서버 모드 on) | 통과 | |
+| live | 가입 입력 오류 400: 서버 필드 오류 표시, 입력 유지 | 통과 | 서버 응답 기준 |
+| live | 로그인 DB 미연결: "처리 중 오류" 표시, 아이디 유지, 저장소에 사용자 정보 없음 | 통과 | 서버 로그에 DB 연결 실패가 남고 화면에는 세부 내용이 나오지 않음 |
+| live | 스크립트 오류 없음 | 통과 | 4xx/5xx 응답의 'Failed to load resource' 콘솔 기록만 제외 |
+
+결과 요약: **mock 24/24 통과 (2회 반복)**, **live 6/6 통과 (DB 없음 환경)**
+
+## 실제로 확인하지 못한 항목 (남은 작업)
+- MySQL 연결 상태에서 가입 성공 → DB에 해시 저장 확인
+- MySQL 연결 상태에서 중복 아이디 409가 실제 DB 중복 키로 나오는지 확인 (지금은 mock 주입만 확인)
+- 실제 로그인 성공 후 세션 쿠키 발급·재조회(`/api/auth/me`)·로그아웃 확인
+- 세션 만료 실제 흐름: 보호 화면에서 401을 받았을 때 `/login?expired=1`로 보내는 처리는 아직 없습니다. 현재는 쿼리 값에 따라 안내 문구만 표시합니다.
+- 로그인 성공 후 대시보드가 실제 사용자 정보와 연결되는지는 아직 확인하지 않았습니다 (mock 대시보드 그대로).
+- `base.html`이 참조하는 `static/css/*`, `static/favicon.svg`, `static/js/navigation.js`는 main에 없는 상태입니다. 이 PR에는 포함하지 않았고, 해당 파일이 있는 환경(PR #2 반영 후)에서 화면 레이아웃을 다시 확인해야 합니다.
+- 노트북에서의 수동 확인(실제 브라우저 클릭 확인)은 아직 하지 않았습니다.
+- 차량·정비기록 live 연결은 이번 범위에서 제외했습니다.
