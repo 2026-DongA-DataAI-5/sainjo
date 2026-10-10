@@ -28,7 +28,7 @@
       <header class="topbar">
         <span class="desktop-context">사인조 · 개발 초안</span>
         <a class="mobile-brand" href="{{ url_for('pages.dashboard') }}" aria-label="차근 관리 대시보드"><span class="brand-mark" aria-hidden="true">차</span>차근</a>
-        <span class="mode-label">가상 데이터 미리보기</span>
+        <span class="mode-label">{{ '서버 연결(로그인)' if api_mode == 'live' else '가상 데이터 미리보기' }}</span>
         <details class="mobile-menu" data-mobile-menu>
           <summary>전체 메뉴</summary>
           <nav aria-label="전체 화면">
@@ -39,7 +39,7 @@
         </details>
       </header>
       <main id="main" tabindex="-1">
-        <div class="prototype-notice" role="note"><strong>개발 진행 중</strong><span>차량·기록은 가상(mock) 응답으로 동작합니다. 서버 DB·로그인·실제 기준 계산은 아직 연결되지 않았습니다.</span></div>
+        <div class="prototype-notice" role="note"><strong>개발 진행 중</strong><span>{% if api_mode == 'live' %}로그인 상태는 서버에서 확인합니다. 차량·기록은 아직 서버에 연결되지 않아 가상 예시로 표시합니다. 실제 기준 계산은 연결되지 않았습니다.{% else %}차량·기록은 가상(mock) 응답으로 동작합니다. 서버 DB·로그인·실제 기준 계산은 아직 연결되지 않았습니다.{% endif %}</span></div>
         {% block content %}{% endblock %}
       </main>
       <footer class="page-footer">차근은 관리 이력과 기준을 바탕으로 확인할 항목을 안내합니다. 실제 부품 상태와 필요한 작업은 정비 점검으로 확인합니다.</footer>
