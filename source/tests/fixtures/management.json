@@ -1,0 +1,98 @@
+{
+  "contract_version": "1.0",
+  "warning": "개발 시험 전용. 실제 기아 주기가 아닙니다.",
+  "input": {
+    "vehicle": {
+      "id": 1,
+      "manufacturer": "기아",
+      "model": "K5",
+      "generation": "DL3",
+      "year": 2021,
+      "engine": "G2.0 CVVL",
+      "fuel": "가솔린",
+      "transmission": "자동",
+      "mileage": 25000,
+      "reference_date": "2026-06-01",
+      "conditions": "normal",
+      "created_at": "2026-06-01T00:00:00Z"
+    },
+    "records": [
+      {
+        "id": 1,
+        "vehicle_id": 1,
+        "kind": "previous_history",
+        "item_key": "engine-oil",
+        "work_type": "replacement",
+        "date": "2026-01-31",
+        "mileage": 20000,
+        "result": "테스트용 교환 기록",
+        "source": "가상 테스트 데이터",
+        "checked_date": "2026-06-01",
+        "created_at": "2026-06-01T00:00:00Z"
+      }
+    ],
+    "rule": {
+      "rule_id": "TEST_ONLY_OIL_001",
+      "item_key": "engine-oil",
+      "action": "replacement",
+      "applicability": {
+        "manufacturer": "기아",
+        "model": "K5",
+        "generation": "DL3",
+        "years": [
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "engine": "G2.0 CVVL",
+        "fuel": "가솔린",
+        "transmission": "자동"
+      },
+      "conditions": "normal",
+      "interval_km": 10000,
+      "interval_months": 6,
+      "source": "가상 테스트 기준 - 실제 제조사 기준 아님",
+      "checked_date": "2026-06-01",
+      "rights_status": "test_fixture",
+      "review_status": "reviewed",
+      "is_fixture": true
+    },
+    "as_of_date": "2026-06-01"
+  },
+  "expected": {
+    "item_key": "engine-oil",
+    "history_status": "recorded",
+    "timing_status": "upcoming",
+    "labels": [
+      "확인된 관리 이력",
+      "향후 관리 예정"
+    ],
+    "next_mileage": 30000,
+    "next_date": "2026-07-31",
+    "reasons": [
+      "가상 기준의 거리·기간 모두 미도달"
+    ],
+    "missing_fields": [],
+    "rule_id": "TEST_ONLY_OIL_001",
+    "source": "가상 테스트 기준 - 실제 제조사 기준 아님",
+    "checked_date": "2026-06-01",
+    "questions": [
+      "마지막 교환 기록과 운행조건을 함께 확인해 주실 수 있나요?"
+    ],
+    "is_fixture": true
+  },
+  "compare_fields": [
+    "item_key",
+    "history_status",
+    "timing_status",
+    "labels",
+    "next_mileage",
+    "next_date",
+    "missing_fields",
+    "rule_id",
+    "source",
+    "checked_date",
+    "is_fixture"
+  ]
+}
