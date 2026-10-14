@@ -8,7 +8,7 @@
 -- 계정당 차량 1대는 vehicles.owner_id UNIQUE로 보장합니다.
 -- 날짜·거리가 없는 값은 NULL입니다. 0km와 NULL은 다른 값입니다.
 -- 자료 확인일(checked_date)은 증빙 자동 검증 결과가 아닙니다.
--- 기존 DB는 source/chageun/migrations/001_vehicle_date_and_service_items.sql을 한 번 적용하세요.
+-- 기존 DB는 migrations/001_vehicle_date_and_service_items.sql부터 번호 순서대로 한 번 적용하세요.
 
 CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS records (
     KEY idx_records_vehicle_order (vehicle_id, record_date, created_at, id),
     CONSTRAINT fk_records_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles (id) ON DELETE CASCADE,
     CONSTRAINT ck_records_kind CHECK (kind IN ('previous_history', 'maintenance_result')),
-    CONSTRAINT ck_records_item CHECK (item_key IN ('engine-oil', 'spark-plugs', 'drive-belt')),
+    CONSTRAINT ck_records_item CHECK (item_key IN ('engine-oil', 'spark-plugs', 'drive-belt', 'brake-pads-discs', 'lower-arm-ball-joint')),
     CONSTRAINT ck_records_work_type CHECK (work_type IN ('inspection', 'replacement', 'unknown')),
     CONSTRAINT ck_records_mileage CHECK (mileage IS NULL OR mileage <= 1000000)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;

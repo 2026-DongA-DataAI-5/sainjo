@@ -161,12 +161,13 @@
     transmission: { type: 'string', max: 40 },
     mileage: { type: 'int', min: 0, max: 1000000 },
     reference_date: { type: 'date' },
+    in_service_date: { type: 'date' },
     conditions: { type: 'enum', values: ['normal', 'severe', 'unknown'], required: true, defaultValue: 'unknown' },
   };
 
   const RECORD_SCHEMA = {
     kind: { type: 'enum', values: ['previous_history', 'maintenance_result'], required: true },
-    item_key: { type: 'enum', values: ['engine-oil'], required: true },
+    item_key: { type: 'enum', values: ['engine-oil', 'spark-plugs', 'drive-belt', 'brake-pads-discs', 'lower-arm-ball-joint'], required: true },
     work_type: { type: 'enum', values: ['inspection', 'replacement', 'unknown'], required: true },
     date: { type: 'date' },
     mileage: { type: 'int', min: 0, max: 1000000 },

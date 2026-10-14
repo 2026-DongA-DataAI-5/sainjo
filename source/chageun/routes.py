@@ -3,7 +3,7 @@ from flask import Blueprint, abort, current_app, jsonify, render_template, reque
 from .sample_data import DEMO_HISTORY, DEMO_ITEMS, DEMO_VEHICLE, STATUS_LABELS
 
 pages = Blueprint("pages", __name__)
-RECORD_ITEM_KEYS = {"engine-oil", "spark-plugs", "drive-belt"}
+RECORD_ITEM_KEYS = {"engine-oil", "spark-plugs", "drive-belt", "brake-pads-discs", "lower-arm-ball-joint"}
 
 
 @pages.app_context_processor
@@ -67,7 +67,7 @@ def maintenance_new():
 
 @pages.get("/items/<item_key>")
 def item_detail(item_key):
-    if _auth_api_mode() == "live" and item_key not in {"engine-oil", "spark-plugs", "drive-belt"}:
+    if _auth_api_mode() == "live" and item_key not in RECORD_ITEM_KEYS:
         abort(404)
     item = next((entry for entry in DEMO_ITEMS if entry["key"] == item_key), None)
     if item is None:

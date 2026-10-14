@@ -415,7 +415,7 @@ def update_vehicle(vehicle_id):
 
 RECORD_ENUMS = {
     "kind": {"previous_history", "maintenance_result"},
-    "item_key": {"engine-oil", "spark-plugs", "drive-belt"},
+    "item_key": {"engine-oil", "spark-plugs", "drive-belt", "brake-pads-discs", "lower-arm-ball-joint"},
     "work_type": {"inspection", "replacement", "unknown"},
 }
 RECORD_TEXT_LIMITS = {"result": 2000, "source": 100}

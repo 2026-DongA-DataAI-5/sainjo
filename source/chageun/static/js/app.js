@@ -36,7 +36,7 @@
   };
   const WORK_TYPE_LABELS = { inspection: '점검', replacement: '교환', unknown: '작업 유형 미확인' };
   const KIND_LABELS = { previous_history: '이전 이력 입력', maintenance_result: '정비 결과 입력' };
-  const ITEM_LABELS = { 'engine-oil': '엔진 오일·오일필터', 'air-filter': '엔진 에어클리너 필터', coolant: '냉각수', 'spark-plugs': '점화플러그', 'drive-belt': '구동벨트' };
+  const ITEM_LABELS = { 'engine-oil': '엔진 오일·오일필터', 'air-filter': '엔진 에어클리너 필터', coolant: '냉각수', 'spark-plugs': '점화플러그', 'drive-belt': '구동벨트', 'brake-pads-discs': '브레이크 패드·디스크', 'lower-arm-ball-joint': '로워암 볼 조인트' };
 
   function appPath(path) {
     return `${APP_BASE_PATH}${path.startsWith('/') ? path : `/${path}`}`;
