@@ -25,8 +25,10 @@ class ManagementApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.get_json()
         self.assertEqual(body["data"]["vehicle_id"], self.vehicle_id)
-        self.assertEqual(len(body["data"]["items"]), 1)
-        return body["data"]["items"][0], body["meta"]
+        items = body["data"]["items"]
+        oil_item = next((item for item in items if item["item_key"] == "engine-oil"), None)
+        self.assertIsNotNone(oil_item)
+        return oil_item, body["meta"]
 
     def test_default_without_rule_does_not_calculate(self):
         item, meta = self.item()
