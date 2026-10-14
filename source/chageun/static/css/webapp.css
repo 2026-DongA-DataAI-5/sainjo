@@ -21,6 +21,10 @@ body { overflow-wrap: anywhere; }
 .schedule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .form-panel input, .form-panel select, .form-panel textarea { min-width: 0; }
 .form-message:empty { margin: 0; }
+.record-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.record-editor { display: grid; gap: 14px; margin-top: 14px; padding: 16px; }
+.record-editor[hidden] { display: none; }
+.record-editor .form-actions { margin: 0; }
 @media (min-width: 769px) {
   .topbar { position: sticky; top: 0; z-index: 4; }
 }

@@ -39,6 +39,26 @@ class FakeRecords:
     def find_record_by_id_and_vehicle(self, record_id, vehicle_id):
         return next((row for row in self.rows if row["id"] == record_id and row["vehicle_id"] == vehicle_id), None)
 
+    def find_record_by_id_and_owner(self, record_id, owner_id, vehicles):
+        row = next((row for row in self.rows if row["id"] == record_id), None)
+        if row is None or vehicles.by_id_and_owner(row["vehicle_id"], owner_id) is None:
+            return None
+        return row
+
+    def update_record(self, record_id, owner_id, values, vehicles):
+        row = self.find_record_by_id_and_owner(record_id, owner_id, vehicles)
+        if row is None:
+            return 0
+        row.update(values)
+        return 1
+
+    def delete_record(self, record_id, owner_id, vehicles):
+        row = self.find_record_by_id_and_owner(record_id, owner_id, vehicles)
+        if row is None:
+            return 0
+        self.rows.remove(row)
+        return 1
+
 
 class RecordsApiTests(unittest.TestCase):
     def setUp(self):
@@ -54,6 +74,9 @@ class RecordsApiTests(unittest.TestCase):
                 list_records_by_vehicle=self.records.list_records_by_vehicle,
                 count_records=self.records.count_records,
                 find_record_by_id_and_vehicle=self.records.find_record_by_id_and_vehicle,
+                find_record_by_id_and_owner=lambda record_id, owner_id: self.records.find_record_by_id_and_owner(record_id, owner_id, self.vehicles),
+                update_record=lambda record_id, owner_id, values: self.records.update_record(record_id, owner_id, values, self.vehicles),
+                delete_record=lambda record_id, owner_id: self.records.delete_record(record_id, owner_id, self.vehicles),
                 list_records_for_management=self.records.all_records,
             ), create=True),
         ]
@@ -71,6 +94,11 @@ class RecordsApiTests(unittest.TestCase):
         token = client.get("/api/auth/csrf").get_json()["data"]["csrf_token"]
         return client.post(self.path, json=VALID_RECORD if payload is None else payload,
                            headers={"X-CSRF-Token": token})
+
+    def write_record(self, client, method, path, payload=None, csrf=True):
+        token = client.get("/api/auth/csrf").get_json()["data"]["csrf_token"] if csrf else None
+        headers = {"X-CSRF-Token": token} if token else {}
+        return getattr(client, method)(path, json=payload, headers=headers)
 
     def test_create_and_list_preserve_zero_null_and_text(self):
         response = self.post()
@@ -159,3 +187,51 @@ class RecordsApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertNotIn("PRIVATE_DB_DETAIL", response.get_data(as_text=True))
         self.db.rollback.assert_called()
+
+    def test_patch_updates_only_supplied_fields_and_persists_nulls(self):
+        created = self.post().get_json()["data"]
+        response = self.write_record(self.client, "patch", f"/api/records/{created['id']}",
+                                     {"work_type": "inspection", "date": None, "source": "문서 대조"})
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()["data"]
+        self.assertEqual(data["work_type"], "inspection")
+        self.assertIsNone(data["date"])
+        self.assertEqual(data["source"], "문서 대조")
+        self.assertEqual(data["mileage"], 0)
+        self.assertEqual(data["result"], "unknown")
+        self.assertEqual(self.client.get(self.path).get_json()["data"][0], data)
+        self.db.commit.assert_called()
+
+    def test_patch_requires_csrf_and_rejects_unknown_or_invalid_fields(self):
+        created = self.post().get_json()["data"]
+        path = f"/api/records/{created['id']}"
+        self.assertEqual(self.write_record(self.client, "patch", path, {"result": "수정"}, csrf=False).status_code, 403)
+        for payload, field in (({"owner_id": 2}, "owner_id"), ({"date": "2999-01-01"}, "date"),
+                               ({"work_type": "replace"}, "work_type")):
+            with self.subTest(payload=payload):
+                response = self.write_record(self.client, "patch", path, payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(field, response.get_json()["error"]["fields"])
+        self.assertEqual(self.records.rows[0]["work_type"], "replacement")
+
+    def test_patch_and_delete_hide_other_accounts_records(self):
+        created = self.post().get_json()["data"]
+        other = self.app.test_client()
+        with other.session_transaction() as session:
+            session["user_id"] = 2
+        path = f"/api/records/{created['id']}"
+        patched = self.write_record(other, "patch", path, {"result": "변경"})
+        deleted = self.write_record(other, "delete", path)
+        self.assertEqual(patched.status_code, 404)
+        self.assertEqual(deleted.status_code, 404)
+        self.assertEqual(self.records.rows[0]["result"], "unknown")
+
+    def test_delete_requires_csrf_and_removes_record(self):
+        created = self.post().get_json()["data"]
+        path = f"/api/records/{created['id']}"
+        self.assertEqual(self.write_record(self.client, "delete", path, csrf=False).status_code, 403)
+        response = self.write_record(self.client, "delete", path)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["data"], {"id": created["id"], "deleted": True})
+        self.assertEqual(self.client.get(self.path).get_json()["data"], [])
+        self.assertEqual(self.write_record(self.client, "delete", path).status_code, 404)

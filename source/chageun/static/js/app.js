@@ -223,19 +223,120 @@
     appendText(details, 'small', 'muted', `출처: ${textOrUnknown(record.source)} · 자료 확인일: ${record.checked_date || '미확인'} · 등록(한국 시간): ${savedAt}`);
     appendText(details, 'small', 'record-limit-note', '사용자 입력 · 외부 자료와 자동 대조되지 않음');
 
-    if (api.mode === 'live') {
-      entry.append(details);
-      return entry;
-    }
-
-    const removeButton = appendText(details, 'button', 'record-delete', '이 기록 삭제');
+    const actions = document.createElement('div');
+    actions.className = 'record-actions';
+    const editButton = appendText(actions, 'button', 'button secondary', '기록 수정');
+    editButton.type = 'button';
+    const removeButton = appendText(actions, 'button', 'button secondary record-delete', '이 기록 삭제');
     removeButton.type = 'button';
+    details.append(actions);
+
+    const editor = document.createElement('form');
+    editor.className = 'record-editor form-panel';
+    editor.hidden = true;
+    editor.setAttribute('aria-label', '관리 기록 수정');
+    const editorGrid = document.createElement('div');
+    editorGrid.className = 'form-grid';
+    const addEditorField = (name, labelText, type, value, options = null) => {
+      const wrapper = document.createElement('div');
+      if (name === 'result') wrapper.className = 'full';
+      const label = document.createElement('label');
+      const id = `record-${record.id}-${name}`;
+      label.htmlFor = id;
+      label.textContent = labelText;
+      let field;
+      if (type === 'select') {
+        field = document.createElement('select');
+        for (const [optionValue, optionText] of options) {
+          const option = document.createElement('option');
+          option.value = optionValue;
+          option.textContent = optionText;
+          field.append(option);
+        }
+      } else if (type === 'textarea') {
+        field = document.createElement('textarea');
+        field.rows = 3;
+      } else {
+        field = document.createElement('input');
+        field.type = type;
+      }
+      field.id = id;
+      field.name = name;
+      if (type === 'date') field.max = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+      if (name === 'mileage') {
+        field.min = '0';
+        field.max = '1000000';
+        field.step = '1';
+      }
+      if (name === 'result') field.maxLength = 2000;
+      if (name === 'source') field.maxLength = 100;
+      field.value = value === null || value === undefined ? '' : String(value);
+      wrapper.append(label, field);
+      editorGrid.append(wrapper);
+      return field;
+    };
+    const workTypeField = addEditorField('work_type', '작업 유형', 'select', record.work_type, [
+      ['unknown', '작업 유형 미확인'], ['inspection', '점검'], ['replacement', '교환'],
+    ]);
+    const dateField = addEditorField('date', '정비·점검일', 'date', record.date);
+    const mileageField = addEditorField('mileage', '당시 주행거리 km', 'number', record.mileage);
+    const resultField = addEditorField('result', '기록 내용', 'textarea', record.result);
+    const sourceField = addEditorField('source', '이력 출처', 'text', record.source);
+    const checkedDateField = addEditorField('checked_date', '자료 확인일', 'date', record.checked_date);
+    const editorMessage = appendText(editor, 'p', 'form-message', '');
+    editorMessage.setAttribute('role', 'status');
+    editorMessage.setAttribute('aria-live', 'polite');
+    const editorActions = document.createElement('div');
+    editorActions.className = 'form-actions';
+    const saveButton = appendText(editorActions, 'button', 'button primary', '수정 저장');
+    saveButton.type = 'submit';
+    const cancelEdit = appendText(editorActions, 'button', 'button secondary', '취소');
+    cancelEdit.type = 'button';
+    editor.append(editorGrid, editorActions);
+    details.append(editor);
+
+    editButton.addEventListener('click', () => {
+      editor.hidden = false;
+      editButton.hidden = true;
+      workTypeField.focus();
+    });
+    cancelEdit.addEventListener('click', () => {
+      editor.hidden = true;
+      editButton.hidden = false;
+      showMessage(editorMessage, '');
+      editButton.focus();
+    });
+    editor.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      saveButton.disabled = true;
+      cancelEdit.disabled = true;
+      showMessage(editorMessage, '수정 내용을 저장하고 있습니다.');
+      try {
+        await api.records.update(record.id, {
+          work_type: workTypeField.value,
+          date: api.convert.date(dateField.value),
+          mileage: api.convert.int(mileageField.value),
+          result: api.convert.text(resultField.value),
+          source: api.convert.text(sourceField.value),
+          checked_date: api.convert.date(checkedDateField.value),
+        });
+        onChanged();
+      } catch (error) {
+        if (api.mode === 'live' && error.status === 401) redirectToLogin();
+        showMessage(editorMessage, errorText(error));
+        if (error && error.uncertain) onChanged();
+      } finally {
+        saveButton.disabled = false;
+        cancelEdit.disabled = false;
+      }
+    });
+
     const confirmation = document.createElement('div');
     confirmation.className = 'delete-confirmation';
     confirmation.setAttribute('role', 'group');
     confirmation.setAttribute('aria-label', '기록 삭제 확인');
     confirmation.hidden = true;
-    appendText(confirmation, 'span', '', '이 기록을 삭제할까요? 삭제하면 서버 기록에서도 사라집니다.');
+    appendText(confirmation, 'span', '', '이 기록을 삭제할까요? 삭제한 기록은 복구할 수 없습니다.');
     const cancelButton = appendText(confirmation, 'button', 'button secondary', '취소');
     cancelButton.type = 'button';
     const confirmButton = appendText(confirmation, 'button', 'button danger', '삭제');
@@ -257,6 +358,7 @@
         await api.records.remove(record.id);
         onChanged();
       } catch (error) {
+        if (api.mode === 'live' && error.status === 401) redirectToLogin();
         // 삭제 실패 시 항목은 그대로 둡니다. 응답을 못 받았다면 목록을 다시 불러옵니다.
         showMessage(status, errorText(error));
         confirmButton.disabled = false;

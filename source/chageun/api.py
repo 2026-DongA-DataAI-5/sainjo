@@ -469,6 +469,55 @@ def add_record(vehicle_id):
     return ok(_record_out(row), 201)
 
 
+@api.patch("/records/<int:record_id>")
+@login_required
+@csrf_protected
+def update_record(record_id):
+    current = records.find_record_by_id_and_owner(record_id, session["user_id"])
+    if current is None:
+        return fail("NOT_FOUND", "기록을 찾을 수 없습니다.", 404)
+    body = _json_body()
+    if body is None or not body:
+        return fail("VALIDATION_ERROR", "수정할 내용을 입력해 주세요.", 400, {})
+
+    current_data = _record_out(current)
+    merged = {key: current_data[key] for key in RECORD_FIELDS}
+    merged.update(body)
+    values, fields = _record_values(merged)
+    if fields:
+        return fail("VALIDATION_ERROR", "입력을 확인해 주세요", 400, fields)
+
+    db = get_db()
+    try:
+        records.update_record(record_id, session["user_id"], values)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    row = records.find_record_by_id_and_owner(record_id, session["user_id"])
+    if row is None:
+        return fail("NOT_FOUND", "기록을 찾을 수 없습니다.", 404)
+    return ok(_record_out(row))
+
+
+@api.delete("/records/<int:record_id>")
+@login_required
+@csrf_protected
+def remove_record(record_id):
+    db = get_db()
+    try:
+        deleted = records.delete_record(record_id, session["user_id"])
+        if not deleted:
+            db.rollback()
+            return fail("NOT_FOUND", "기록을 찾을 수 없습니다.", 404)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return ok({"id": record_id, "deleted": True})
+
+
 @api.get("/vehicles/<int:vehicle_id>/management")
 @login_required
 def get_management(vehicle_id):

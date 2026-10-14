@@ -23,6 +23,41 @@ def find_record_by_id_and_vehicle(record_id, vehicle_id):
         return cursor.fetchone()
 
 
+def find_record_by_id_and_owner(record_id, owner_id):
+    columns = ", ".join(f"r.{column.strip()}" for column in RECORD_COLUMNS.split(","))
+    with get_db().cursor() as cursor:
+        cursor.execute(
+            f"SELECT {columns} FROM records r JOIN vehicles v ON v.id = r.vehicle_id "
+            "WHERE r.id = %s AND v.owner_id = %s",
+            (record_id, owner_id),
+        )
+        return cursor.fetchone()
+
+
+def update_record(record_id, owner_id, values):
+    with get_db().cursor() as cursor:
+        cursor.execute(
+            "UPDATE records r JOIN vehicles v ON v.id = r.vehicle_id "
+            "SET r.kind = %s, r.item_key = %s, r.work_type = %s, r.record_date = %s, "
+            "r.mileage = %s, r.result = %s, r.source = %s, r.checked_date = %s "
+            "WHERE r.id = %s AND v.owner_id = %s",
+            (values["kind"], values["item_key"], values["work_type"], values["record_date"],
+             values["mileage"], values["result"], values["source"], values["checked_date"],
+             record_id, owner_id),
+        )
+        return cursor.rowcount
+
+
+def delete_record(record_id, owner_id):
+    with get_db().cursor() as cursor:
+        cursor.execute(
+            "DELETE r FROM records r JOIN vehicles v ON v.id = r.vehicle_id "
+            "WHERE r.id = %s AND v.owner_id = %s",
+            (record_id, owner_id),
+        )
+        return cursor.rowcount
+
+
 def list_records_by_vehicle(vehicle_id, page, page_size):
     with get_db().cursor() as cursor:
         cursor.execute(

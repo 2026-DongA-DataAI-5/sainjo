@@ -48,6 +48,11 @@ class MySqlRecordFlowTests(unittest.TestCase):
         token = client.get("/api/auth/csrf").get_json()["data"]["csrf_token"]
         return client.post(path, json=payload, headers={"X-CSRF-Token": token})
 
+    @staticmethod
+    def write_method(client, method, path, payload=None):
+        token = client.get("/api/auth/csrf").get_json()["data"]["csrf_token"]
+        return getattr(client, method)(path, json=payload, headers={"X-CSRF-Token": token})
+
     def replacement(self):
         record = self.fixture["input"]["records"][0]
         return {key: value for key, value in record.items() if key not in ("id", "vehicle_id", "created_at")}
@@ -90,3 +95,21 @@ class MySqlRecordFlowTests(unittest.TestCase):
         self.assertEqual(item["next_mileage"], 30000)
         self.assertEqual(item["next_date"], "2026-07-31")
         self.assertTrue(item["is_fixture"])
+
+    def test_real_mysql_record_edit_and_delete_persist_with_account_ownership(self):
+        client, other = self.clients
+        path = self.path + "/records"
+        created = self.write(client, path, self.replacement()).get_json()["data"]
+        record_path = f"/api/records/{created['id']}"
+        updated = self.write_method(client, "patch", record_path,
+                                    {"work_type": "inspection", "date": None, "mileage": 0}).get_json()["data"]
+        self.assertEqual(updated["work_type"], "inspection")
+        self.assertIsNone(updated["date"])
+        self.assertEqual(updated["mileage"], 0)
+        self.assertEqual(client.get(path).get_json()["data"][0], updated)
+        self.assertEqual(self.write_method(other, "patch", record_path, {"result": "다른 계정"}).status_code, 404)
+        self.assertEqual(self.write_method(other, "delete", record_path).status_code, 404)
+        deleted = self.write_method(client, "delete", record_path)
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(client.get(path).get_json()["data"], [])
+        self.assertEqual(self.write_method(client, "delete", record_path).status_code, 404)
