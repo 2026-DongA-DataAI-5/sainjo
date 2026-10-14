@@ -123,7 +123,7 @@ def _finish(
     elif "vehicle.mileage" in item["missing_fields"] or "vehicle.reference_date" in item["missing_fields"]:
         question = "현재 주행거리와 측정일을 확인해 주실 수 있나요?"
     elif "vehicle.in_service_date" in item["missing_fields"]:
-        question = "차량등록증에서 최초 등록일을 확인해 주실 수 있나요? 중고차 구매일은 사용하지 않습니다."
+        question = "최초 출고일을 확인해 주세요. 모르면 차량등록증의 최초 등록일을 대체 기준으로 쓰고 중고차 구매일은 사용하지 않습니다."
     elif item["history_status"] == "unknown":
         question = f"{item_name}의 이전 {work_name} 기록과 실제 운행조건을 확인해 주실 수 있나요?"
     else:
