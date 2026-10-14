@@ -160,6 +160,8 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     await page.locator('[data-vehicle-name]').filter({ hasText: '등록' }).waitFor();
     assert.equal(await page.locator('[data-dashboard-records]').innerText(), '저장된 관리기록이 없습니다.');
     assert.equal(await page.locator('[data-vehicle-name]').innerText(), '차량을 먼저 등록해 주세요');
+    assert.equal(await page.locator('[data-management-controls]').isVisible(), false);
+    await page.locator('[data-management-content]').getByRole('link', { name: '차량 등록하기' }).waitFor();
     check('second account does not see first account data');
     await login(username);
     await page.locator('[data-management-content] article').waitFor();

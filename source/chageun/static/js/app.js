@@ -575,22 +575,33 @@
     const content = document.querySelector('[data-management-content]');
     const questions = document.querySelector('[data-management-questions]');
     const note = document.querySelector('[data-demo-data-note]');
+    const controls = document.querySelector('[data-management-controls]');
+    if (controls) controls.hidden = true;
     if (content) content.textContent = '관리 안내를 불러오는 중입니다.';
     if (questions) questions.replaceChildren();
     try {
       const vehicle = suppliedVehicle === undefined ? await loadVehicle() : suppliedVehicle;
       if (!vehicle) {
-        if (content) content.textContent = '차량을 등록하면 관리 안내를 확인할 수 있습니다.';
+        if (content) {
+          content.replaceChildren();
+          appendText(content, 'p', '', '차량을 등록하면 적용 가능한 관리 안내와 확인할 질문을 살펴볼 수 있습니다.');
+          const link = appendText(content, 'a', 'button primary', '차량 등록하기');
+          link.href = appPath('/vehicle');
+        }
         showMessage(note, '등록된 차량이 없습니다.');
         if (questions) questions.textContent = '차량 등록 후 확인 질문이 표시됩니다.';
         return;
       }
       const body = await api.management.get(vehicle.id);
+      const items = Array.isArray(body.data.items) ? body.data.items : [];
       showMessage(note, body.meta.calculation_mode === 'test_fixture'
         ? '가상 시험 기준으로 계산한 결과입니다. 실제 제조사 권장 주기가 아닙니다.'
             : '각 관리 기준의 상태를 확인해 안내합니다. 기준이 확정되지 않은 항목은 시점 계산을 보류합니다.');
       if (content) content.replaceChildren();
-      for (const item of body.data.items) {
+      if (items.length === 0 && content) {
+        appendText(content, 'p', '', '현재 차량에 적용할 수 있는 관리 안내가 없습니다. 차량 사양과 관리 기준을 확인해 주세요.');
+      }
+      for (const item of items) {
         if (content) {
           const row = appendText(content, 'article', 'maintenance-row', '');
           row.dataset.labels = item.labels.join('|');
@@ -615,10 +626,11 @@
         }
       }
       document.querySelectorAll('.status-count[data-label]').forEach((counter) => {
-        const count = body.data.items.filter((item) => item.labels.includes(counter.dataset.label)).length;
+        const count = items.filter((item) => Array.isArray(item.labels) && item.labels.includes(counter.dataset.label)).length;
         counter.replaceChildren(document.createTextNode(String(count)));
         appendText(counter, 'small', '', '개 항목');
       });
+      if (controls && items.length > 0) controls.hidden = false;
     } catch (error) {
       if (error.status === 401) redirectToLogin();
       if (content) content.textContent = errorText(error);

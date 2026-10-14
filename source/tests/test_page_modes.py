@@ -17,6 +17,9 @@ class PageModeTests(unittest.TestCase):
                 self.assertFalse("가상 저장(mock)" in text, path)
                 self.assertFalse("75,000km" in text, path)
                 self.assertFalse("화면 예시 · 날짜가 있는 기록" in text, path)
+        dashboard = client.get("/dashboard").get_data(as_text=True)
+        self.assertIn('data-management-controls hidden', dashboard)
+        self.assertIn('data-management-content', dashboard)
         form = client.get("/maintenance/new").get_data(as_text=True)
         self.assertIn('value="unknown"', form)
         self.assertNotIn('value="coolant"', form)
@@ -29,3 +32,6 @@ class PageModeTests(unittest.TestCase):
                 with client.get(path) as response:
                     self.assertEqual(response.status_code, 200)
         self.assertIn('data-api-mode="mock"', client.get("/vehicle").get_data(as_text=True))
+        dashboard = client.get("/dashboard").get_data(as_text=True)
+        self.assertIn('data-management-controls ', dashboard)
+        self.assertNotIn('data-management-controls hidden', dashboard)
