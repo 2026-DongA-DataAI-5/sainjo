@@ -1,17 +1,17 @@
-"""엔진오일 기록 저장소. 소유권은 호출 API에서 확인하며 커밋도 API가 담당합니다."""
+"""차량 관리 기록 저장소. 소유권은 호출 API에서 확인하며 커밋도 API가 담당합니다."""
 
 from .db import get_db
 
-RECORD_COLUMNS = "id, vehicle_id, kind, item_key, work_type, record_date, mileage, result, source, checked_date, created_at"
+RECORD_COLUMNS = "id, vehicle_id, kind, item_key, component_position, work_type, record_date, mileage, result, source, checked_date, created_at"
 RECORD_ORDER = "record_date DESC, created_at DESC, id DESC"
 
 
 def create_record(vehicle_id, values):
     with get_db().cursor() as cursor:
         cursor.execute(
-            "INSERT INTO records (vehicle_id, kind, item_key, work_type, record_date, mileage, result, source, checked_date) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (vehicle_id, values["kind"], values["item_key"], values["work_type"], values["record_date"],
+            "INSERT INTO records (vehicle_id, kind, item_key, component_position, work_type, record_date, mileage, result, source, checked_date) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (vehicle_id, values["kind"], values["item_key"], values["component_position"], values["work_type"], values["record_date"],
              values["mileage"], values["result"], values["source"], values["checked_date"]),
         )
         return cursor.lastrowid
@@ -38,10 +38,10 @@ def update_record(record_id, owner_id, values):
     with get_db().cursor() as cursor:
         cursor.execute(
             "UPDATE records r JOIN vehicles v ON v.id = r.vehicle_id "
-            "SET r.kind = %s, r.item_key = %s, r.work_type = %s, r.record_date = %s, "
+            "SET r.kind = %s, r.item_key = %s, r.component_position = %s, r.work_type = %s, r.record_date = %s, "
             "r.mileage = %s, r.result = %s, r.source = %s, r.checked_date = %s "
             "WHERE r.id = %s AND v.owner_id = %s",
-            (values["kind"], values["item_key"], values["work_type"], values["record_date"],
+            (values["kind"], values["item_key"], values["component_position"], values["work_type"], values["record_date"],
              values["mileage"], values["result"], values["source"], values["checked_date"],
              record_id, owner_id),
         )

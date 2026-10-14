@@ -11,7 +11,7 @@ from test_api import FakeVehicles, VALID_VEHICLE
 
 
 VALID_RECORD = {
-    "kind": "maintenance_result", "item_key": "engine-oil", "work_type": "replacement",
+    "kind": "maintenance_result", "item_key": "engine-oil", "component_position": "unknown", "work_type": "replacement",
     "date": "2026-01-31", "mileage": 0, "result": "unknown", "source": None, "checked_date": None,
 }
 
@@ -147,6 +147,7 @@ class RecordsApiTests(unittest.TestCase):
             self.assertEqual(response.status_code, 201)
             data = response.get_json()["data"]
             self.assertEqual(data["work_type"], work_type)
+            self.assertEqual(data["component_position"], "unknown")
             for field in ("date", "mileage", "result", "source", "checked_date"):
                 self.assertIsNone(data[field])
 

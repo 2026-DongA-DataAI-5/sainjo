@@ -416,8 +416,10 @@ def update_vehicle(vehicle_id):
 RECORD_ENUMS = {
     "kind": {"previous_history", "maintenance_result"},
     "item_key": {"engine-oil", "spark-plugs", "drive-belt", "brake-pads-discs", "lower-arm-ball-joint"},
+    "component_position": {"unknown", "front", "rear", "left", "right", "front_left", "front_right", "rear_left", "rear_right"},
     "work_type": {"inspection", "replacement", "unknown"},
 }
+RECORD_ENUM_DEFAULTS = {"component_position": "unknown"}
 RECORD_TEXT_LIMITS = {"result": 2000, "source": 100}
 RECORD_FIELDS = set(RECORD_ENUMS) | set(RECORD_TEXT_LIMITS) | {"date", "mileage", "checked_date"}
 
@@ -430,7 +432,7 @@ def _record_values(body):
     fields = {key: "허용되지 않은 필드입니다." for key in set(body) - RECORD_FIELDS}
     values = {}
     for key, allowed in RECORD_ENUMS.items():
-        value = body.get(key)
+        value = body.get(key, RECORD_ENUM_DEFAULTS.get(key))
         if not isinstance(value, str) or value not in allowed:
             fields[key] = "허용된 항목을 선택해 주세요."
         else:
@@ -465,7 +467,7 @@ def _record_values(body):
 
 
 def _record_out(row):
-    data = {key: row[key] for key in ("id", "vehicle_id", "kind", "item_key", "work_type", "mileage", "result", "source")}
+    data = {key: row[key] for key in ("id", "vehicle_id", "kind", "item_key", "component_position", "work_type", "mileage", "result", "source")}
     for source, target in (("record_date", "date"), ("checked_date", "checked_date")):
         data[target] = row[source].isoformat() if row[source] is not None else None
     data["created_at"] = row["created_at"].isoformat(timespec="microseconds") + "Z"

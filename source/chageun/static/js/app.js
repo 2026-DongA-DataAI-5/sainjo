@@ -25,6 +25,7 @@
     conditions: '운행조건',
     kind: '기록 종류',
     item_key: '관리항목',
+    component_position: '정비 위치',
     item: '관리항목',
     work_type: '작업 유형',
     date: '정비·점검일',
@@ -37,6 +38,7 @@
   const WORK_TYPE_LABELS = { inspection: '점검', replacement: '교환', unknown: '작업 유형 미확인' };
   const KIND_LABELS = { previous_history: '이전 이력 입력', maintenance_result: '정비 결과 입력' };
   const ITEM_LABELS = { 'engine-oil': '엔진 오일·오일필터', 'air-filter': '엔진 에어클리너 필터', coolant: '냉각수', 'spark-plugs': '점화플러그', 'drive-belt': '구동벨트', 'brake-pads-discs': '브레이크 패드·디스크', 'lower-arm-ball-joint': '로워암 볼 조인트' };
+  const POSITION_LABELS = { unknown: '위치 미확인', front: '앞쪽', rear: '뒤쪽', left: '왼쪽', right: '오른쪽', front_left: '앞 왼쪽', front_right: '앞 오른쪽', rear_left: '뒤 왼쪽', rear_right: '뒤 오른쪽' };
 
   function appPath(path) {
     return `${APP_BASE_PATH}${path.startsWith('/') ? path : `/${path}`}`;
@@ -201,6 +203,7 @@
     return {
       kind: form.dataset.recordKind,
       item_key: value('item'),
+      component_position: value('component_position'),
       work_type: value('work_type'),
       date: api.convert.date(value('date')),
       mileage: api.convert.int(value('mileage')),
@@ -222,6 +225,9 @@
     const title = document.createElement('h3');
     title.textContent = ITEM_LABELS[record.item_key] || '관리항목 미확인';
     details.append(title);
+    if (record.component_position && record.component_position !== 'unknown') {
+      appendText(details, 'span', 'badge', POSITION_LABELS[record.component_position] || '위치 미확인');
+    }
     appendText(details, 'p', '', record.result || '추가 메모 없음');
     const savedDate = new Date(record.created_at);
     const savedAt = typeof record.created_at === 'string' && !Number.isNaN(savedDate.getTime())
@@ -284,6 +290,10 @@
     const workTypeField = addEditorField('work_type', '작업 유형', 'select', record.work_type, [
       ['unknown', '작업 유형 미확인'], ['inspection', '점검'], ['replacement', '교환'],
     ]);
+    const positionField = addEditorField('component_position', '정비 위치', 'select', record.component_position || 'unknown', [
+      ['unknown', '위치 미확인·해당 없음'], ['front', '앞쪽'], ['rear', '뒤쪽'], ['left', '왼쪽'], ['right', '오른쪽'],
+      ['front_left', '앞 왼쪽'], ['front_right', '앞 오른쪽'], ['rear_left', '뒤 왼쪽'], ['rear_right', '뒤 오른쪽'],
+    ]);
     const dateField = addEditorField('date', '정비·점검일', 'date', record.date);
     const mileageField = addEditorField('mileage', '당시 주행거리 km', 'number', record.mileage);
     const resultField = addEditorField('result', '기록 내용', 'textarea', record.result);
@@ -320,6 +330,7 @@
       try {
         await api.records.update(record.id, {
           work_type: workTypeField.value,
+          component_position: positionField.value,
           date: api.convert.date(dateField.value),
           mileage: api.convert.int(mileageField.value),
           result: api.convert.text(resultField.value),
