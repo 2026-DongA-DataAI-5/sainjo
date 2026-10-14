@@ -51,3 +51,13 @@ def find_vehicle_by_id_and_owner(vehicle_id, owner_id):
             (vehicle_id, owner_id),
         )
         return cursor.fetchone()
+
+
+def update_mileage_by_id_and_owner(vehicle_id, owner_id, values):
+    with get_db().cursor() as cursor:
+        cursor.execute(
+            "UPDATE vehicles SET mileage = %s, reference_date = %s "
+            "WHERE id = %s AND owner_id = %s",
+            (values["mileage"], values["reference_date"], vehicle_id, owner_id),
+        )
+        return cursor.rowcount

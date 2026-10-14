@@ -382,6 +382,14 @@ class FakeVehicles:
                 return self._public(row)
         return None
 
+    def update_mileage_by_id_and_owner(self, vehicle_id, owner_id, values):
+        for row in self.rows:
+            if row["id"] == vehicle_id and row["owner_id"] == owner_id:
+                row["mileage"] = values["mileage"]
+                row["reference_date"] = values["reference_date"]
+                return 1
+        return 0
+
 
 class VehicleApiTest(unittest.TestCase):
     def setUp(self):
@@ -395,6 +403,10 @@ class VehicleApiTest(unittest.TestCase):
         mock.patch("chageun.api.vehicles.find_vehicle_by_owner", side_effect=self.vehicles.by_owner).start()
         mock.patch(
             "chageun.api.vehicles.find_vehicle_by_id_and_owner", side_effect=self.vehicles.by_id_and_owner
+        ).start()
+        mock.patch(
+            "chageun.api.vehicles.update_mileage_by_id_and_owner",
+            side_effect=self.vehicles.update_mileage_by_id_and_owner,
         ).start()
         mock.patch("chageun.api.get_db", return_value=self.db).start()
         self.addCleanup(mock.patch.stopall)
@@ -423,6 +435,10 @@ class VehicleApiTest(unittest.TestCase):
     def create(self, client, body=None):
         payload = VALID_VEHICLE if body is None else body
         return client.post("/api/vehicles", json=payload, headers={"X-CSRF-Token": self.csrf(client)})
+
+    def patch_vehicle(self, client, vehicle_id, body, csrf=True):
+        headers = {"X-CSRF-Token": self.csrf(client)} if csrf else {}
+        return client.patch(f"/api/vehicles/{vehicle_id}", json=body, headers=headers)
 
     def assert_error(self, response, status, code):
         self.assertEqual(response.status_code, status)
@@ -482,6 +498,58 @@ class VehicleApiTest(unittest.TestCase):
         self.assertIsNone(data["mileage"])
         self.assertIsNone(data["reference_date"])
         self.assertEqual(data["conditions"], "unknown")
+
+    def test_patch_vehicle_updates_only_mileage_and_reference_date(self):
+        self.create(self.client_a)
+        response = self.patch_vehicle(self.client_a, 1, {"mileage": 0, "reference_date": None})
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()["data"]
+        self.assertEqual(data["mileage"], 0)
+        self.assertIsNone(data["reference_date"])
+        self.assertEqual(data["model"], VALID_VEHICLE["model"])
+        self.assertEqual(self.client_a.get("/api/vehicles/1").get_json()["data"], data)
+        response = self.patch_vehicle(self.client_a, 1, {"mileage": None, "reference_date": "2026-01-31"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.get_json()["data"]["mileage"])
+        self.assertEqual(response.get_json()["data"]["reference_date"], "2026-01-31")
+
+    def test_patch_vehicle_requires_csrf_and_preserves_values(self):
+        self.create(self.client_a)
+        before = self.client_a.get("/api/vehicles/1").get_json()["data"]
+        response = self.patch_vehicle(self.client_a, 1, {"mileage": 10, "reference_date": None}, csrf=False)
+        self.assert_error(response, 403, "CSRF_FAILED")
+        self.assertEqual(self.client_a.get("/api/vehicles/1").get_json()["data"], before)
+
+    def test_patch_vehicle_hides_missing_and_other_account_vehicles(self):
+        self.create(self.client_a)
+        self.assert_error(self.patch_vehicle(self.client_b, 1, {"mileage": 10, "reference_date": None}), 404, "NOT_FOUND")
+        self.assert_error(self.patch_vehicle(self.client_a, 999, {"mileage": 10, "reference_date": None}), 404, "NOT_FOUND")
+        self.assertEqual(
+            self.vehicles.by_id_and_owner(1, self.users.by_username("tester_a")["id"])["mileage"],
+            VALID_VEHICLE["mileage"],
+        )
+
+    def test_patch_vehicle_rejects_invalid_payloads_without_changing_vehicle(self):
+        self.create(self.client_a)
+        invalid_payloads = [
+            {"mileage": 1},
+            {"reference_date": None},
+            {"mileage": -1, "reference_date": None},
+            {"mileage": 1000001, "reference_date": None},
+            {"mileage": True, "reference_date": None},
+            {"mileage": "100", "reference_date": None},
+            {"mileage": 10, "reference_date": "2026-02-30"},
+            {"mileage": 10, "reference_date": "2999-01-01"},
+            {"mileage": 10, "reference_date": None, "model": "다른 차"},
+            {},
+        ]
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                self.assert_error(self.patch_vehicle(self.client_a, 1, payload), 400, "VALIDATION_ERROR")
+                self.assertEqual(
+                    self.client_a.get("/api/vehicles/1").get_json()["data"]["mileage"],
+                    VALID_VEHICLE["mileage"],
+                )
 
     def test_second_vehicle_for_same_account_is_409(self):
         self.assertEqual(self.create(self.client_a).status_code, 201)

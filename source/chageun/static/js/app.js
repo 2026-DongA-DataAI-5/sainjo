@@ -152,6 +152,13 @@
     };
   }
 
+  function vehicleMileageFromForm(form) {
+    return {
+      mileage: api.convert.int(form.elements.namedItem('mileage').value),
+      reference_date: api.convert.date(form.elements.namedItem('reference_date').value),
+    };
+  }
+
   function fillVehicleForm(form, vehicle) {
     for (const name of ['manufacturer', 'model', 'generation', 'year', 'engine', 'fuel', 'transmission', 'mileage', 'reference_date']) {
       const field = form.elements.namedItem(name);
@@ -171,11 +178,13 @@
       const vehicle = await loadVehicle();
       if (vehicle) fillVehicleForm(form, vehicle);
       if (vehicle && api.mode === 'live') {
-        form.dataset.readOnly = 'true';
-        form.querySelectorAll('input, select').forEach((field) => { field.disabled = true; });
-        form.querySelector('button[type="submit"]').hidden = true;
-        form.querySelector('[data-save-status]').textContent = '등록된 차량 · 조회';
-        showMessage(status, '등록된 차량입니다. 현재는 차량 수정 기능을 지원하지 않습니다.');
+        form.dataset.existingVehicle = 'true';
+        form.querySelectorAll('input, select').forEach((field) => {
+          field.disabled = !['mileage', 'reference_date'].includes(field.name);
+        });
+        form.querySelector('button[type="submit"]').textContent = '주행거리 저장하고 대시보드 보기';
+        form.querySelector('[data-save-status]').textContent = '등록 차량 · 주행거리 수정';
+        showMessage(status, '차량 기본정보는 조회 전용입니다. 주행거리와 측정 기준일을 함께 수정할 수 있습니다.');
       } else {
         showMessage(status, '');
       }
@@ -629,14 +638,18 @@
   if (vehicleForm) {
     initVehicleForm(vehicleForm);
     guardedSubmit(vehicleForm, async () => {
-      if (vehicleForm.dataset.readOnly === 'true') return;
       const payload = vehicleFromForm(vehicleForm);
       const current = await loadVehicle();
       if (current && api.mode === 'live') {
-        throw new api.ApiError({ status: 409, code: 'CONFLICT', message: '이미 등록된 차량이 있습니다. 현재는 수정할 수 없습니다.' });
+        if (vehicleForm.dataset.existingVehicle !== 'true') {
+          throw new api.ApiError({ status: 409, code: 'CONFLICT', message: '이미 등록된 차량입니다. 화면을 새로고침해 주세요.' });
+        }
+        await api.vehicles.update(current.id, vehicleMileageFromForm(vehicleForm));
+      } else if (current) {
+        await api.vehicles.update(current.id, payload);
+      } else {
+        await api.vehicles.create(payload);
       }
-      if (current) await api.vehicles.update(current.id, payload);
-      else await api.vehicles.create(payload);
       window.location.assign(appPath('/dashboard'));
     });
   }
