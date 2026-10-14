@@ -18,6 +18,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from .repositories import records, users, vehicles
 from .repositories.db import get_db
 from .services.management import evaluate_management
+from .services.rule_registry import candidate_rule_for
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -558,7 +559,7 @@ def get_management(vehicle_id):
     vehicle = vehicles.find_vehicle_by_id_and_owner(vehicle_id, session["user_id"])
     if vehicle is None:
         return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
-    rule = None
+    rule = candidate_rule_for(_vehicle_out(vehicle))
     calculation_mode = "unavailable"
     if current_app.config.get("CHAGEUN_ALLOW_TEST_FIXTURE"):
         # 개발자가 명시적으로 허용한 가상 시험 기준만 사용합니다. 실제 제조사 기준이 아닙니다.

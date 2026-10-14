@@ -34,7 +34,9 @@ class ManagementApiTests(unittest.TestCase):
         self.assertEqual(item["timing_status"], "unknown")
         self.assertIsNone(item["next_mileage"])
         self.assertFalse(item["is_fixture"])
-        self.assertIn("rule", item["missing_fields"])
+        self.assertEqual(item["rule_id"], "KIA_DL3_2021_G20_OIL_NORMAL_CANDIDATE")
+        self.assertIn("rule.rights_status", item["missing_fields"])
+        self.assertIn("권한 또는 검토 상태", item["reasons"][0])
 
     def test_known_history_is_preserved_without_rule(self):
         self.assertEqual(self.post({**support.VALID_RECORD, "work_type": "inspection"}).status_code, 201)
@@ -42,6 +44,26 @@ class ManagementApiTests(unittest.TestCase):
         self.assertEqual(item["history_status"], "recorded")
         self.assertEqual(item["timing_status"], "unknown")
         self.assertEqual(meta["calculation_mode"], "unavailable")
+
+    def test_candidate_rule_never_calculates_before_rights_approval(self):
+        self.assertEqual(self.post({**support.VALID_RECORD, "date": "2026-01-01", "mileage": 10000}).status_code, 201)
+        item, meta = self.item()
+        self.assertEqual(meta["calculation_mode"], "unavailable")
+        self.assertEqual(item["rule_id"], "KIA_DL3_2021_G20_OIL_NORMAL_CANDIDATE")
+        self.assertEqual(item["timing_status"], "unknown")
+        self.assertIsNone(item["next_mileage"])
+        self.assertIsNone(item["next_date"])
+
+    def test_only_verified_candidate_year_and_conditions_resolve(self):
+        vehicle = self.vehicles.rows[0]
+        vehicle["year"] = 2022
+        item, _ = self.item()
+        self.assertIsNone(item["rule_id"])
+        self.assertIn("rule", item["missing_fields"])
+        vehicle["year"] = 2021
+        vehicle["conditions"] = "severe"
+        item, _ = self.item()
+        self.assertEqual(item["rule_id"], "KIA_DL3_2021_G20_OIL_SEVERE_CANDIDATE")
 
     def test_explicit_fixture_and_record_mapping_match_engine_contract(self):
         self.app.config["CHAGEUN_ALLOW_TEST_FIXTURE"] = True
