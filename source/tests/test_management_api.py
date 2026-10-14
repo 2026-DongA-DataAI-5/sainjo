@@ -1,0 +1,83 @@
+"""실제 기록과 순수 관리판단 엔진을 연결하는 API의 경계 시험."""
+
+import copy
+import json
+from datetime import date
+from pathlib import Path
+import unittest
+import test_records_api as support
+
+
+class ManagementApiTests(unittest.TestCase):
+    post = support.RecordsApiTests.post
+
+    def setUp(self):
+        support.RecordsApiTests.setUp(self)
+        self.fixture = json.loads((Path(__file__).parent / "fixtures/management.json").read_text(encoding="utf-8"))
+        vehicle = copy.deepcopy(self.fixture["input"]["vehicle"])
+        vehicle["reference_date"] = date.fromisoformat(vehicle["reference_date"])
+        self.vehicles.rows[0].update(vehicle)
+        self.app.config["CHAGEUN_MANAGEMENT_AS_OF_DATE"] = self.fixture["input"]["as_of_date"]
+        self.management_path = f"/api/vehicles/{self.vehicle_id}/management"
+
+    def item(self):
+        response = self.client.get(self.management_path)
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(body["data"]["vehicle_id"], self.vehicle_id)
+        self.assertEqual(len(body["data"]["items"]), 1)
+        return body["data"]["items"][0], body["meta"]
+
+    def test_default_without_rule_does_not_calculate(self):
+        item, meta = self.item()
+        self.assertEqual(meta["calculation_mode"], "unavailable")
+        self.assertEqual(item["timing_status"], "unknown")
+        self.assertIsNone(item["next_mileage"])
+        self.assertFalse(item["is_fixture"])
+        self.assertIn("rule", item["missing_fields"])
+
+    def test_known_history_is_preserved_without_rule(self):
+        self.assertEqual(self.post({**support.VALID_RECORD, "work_type": "inspection"}).status_code, 201)
+        item, meta = self.item()
+        self.assertEqual(item["history_status"], "recorded")
+        self.assertEqual(item["timing_status"], "unknown")
+        self.assertEqual(meta["calculation_mode"], "unavailable")
+
+    def test_explicit_fixture_and_record_mapping_match_engine_contract(self):
+        self.app.config["CHAGEUN_ALLOW_TEST_FIXTURE"] = True
+        record = self.fixture["input"]["records"][0]
+        payload = {key: value for key, value in record.items() if key not in ("id", "vehicle_id", "created_at")}
+        self.assertEqual(self.post(payload).status_code, 201)
+        item, meta = self.item()
+        self.assertEqual(meta["calculation_mode"], "test_fixture")
+        for field in self.fixture["compare_fields"]:
+            self.assertEqual(item[field], self.fixture["expected"][field], field)
+
+    def test_inspection_does_not_reset_replacement_or_unknown_history(self):
+        self.app.config["CHAGEUN_ALLOW_TEST_FIXTURE"] = True
+        self.post({**support.VALID_RECORD, "work_type": "unknown"})
+        item, _ = self.item()
+        self.assertEqual(item["history_status"], "unknown")
+        self.post({**support.VALID_RECORD, "work_type": "inspection"})
+        item, _ = self.item()
+        self.assertEqual(item["history_status"], "recorded")
+        self.assertEqual(item["timing_status"], "unknown")
+        self.assertIsNone(item["next_date"])
+
+    def test_jf_is_unsupported_and_unknown_conditions_are_unknown(self):
+        self.app.config["CHAGEUN_ALLOW_TEST_FIXTURE"] = True
+        self.vehicles.rows[0]["generation"] = "JF"
+        self.assertEqual(self.item()[0]["timing_status"], "unsupported")
+        self.vehicles.rows[0]["generation"] = "DL3"
+        self.vehicles.rows[0]["conditions"] = "unknown"
+        self.assertEqual(self.item()[0]["timing_status"], "unknown")
+
+    def test_management_auth_and_ownership(self):
+        anonymous = self.app.test_client()
+        self.assertEqual(anonymous.get(self.management_path).status_code, 401)
+        with anonymous.session_transaction() as session:
+            session["user_id"] = 2
+        other = anonymous.get(self.management_path)
+        missing = anonymous.get("/api/vehicles/999/management")
+        self.assertEqual(other.status_code, 404)
+        self.assertEqual(other.get_json(), missing.get_json())

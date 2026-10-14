@@ -5,6 +5,8 @@
 
 import re
 import secrets
+import json
+from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 
@@ -15,6 +17,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from .repositories import records, users, vehicles
 from .repositories.db import get_db
+from .services.management import evaluate_management
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -463,6 +466,24 @@ def add_record(vehicle_id):
     if row is None:
         raise RuntimeError("저장한 기록을 다시 읽지 못했습니다.")
     return ok(_record_out(row), 201)
+
+
+@api.get("/vehicles/<int:vehicle_id>/management")
+@login_required
+def get_management(vehicle_id):
+    vehicle = vehicles.find_vehicle_by_id_and_owner(vehicle_id, session["user_id"])
+    if vehicle is None:
+        return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
+    rule = None
+    calculation_mode = "unavailable"
+    if current_app.config.get("CHAGEUN_ALLOW_TEST_FIXTURE"):
+        # 개발자가 명시적으로 허용한 가상 시험 기준만 사용합니다. 실제 제조사 기준이 아닙니다.
+        rule = json.loads((Path(__file__).parent / "services/test_rule.json").read_text(encoding="utf-8"))
+        calculation_mode = "test_fixture"
+    as_of_date = current_app.config.get("CHAGEUN_MANAGEMENT_AS_OF_DATE") or _today_korea().isoformat()
+    items = [_record_out(row) for row in records.list_records_for_management(vehicle_id)]
+    item = evaluate_management(_vehicle_out(vehicle), items, rule, as_of_date)
+    return ok({"vehicle_id": vehicle_id, "items": [item]}, calculation_mode=calculation_mode)
 
 
 @api.errorhandler(Exception)

@@ -13,6 +13,7 @@ def create_app(test_config=None):
     app.config.update(
         # 서버 모드에서만 인증·DB 기능을 켭니다. 기본값은 꺼짐입니다.
         CHAGEUN_SERVER_MODE=_env_flag("CHAGEUN_SERVER_MODE"),
+        CHAGEUN_ALLOW_TEST_FIXTURE=_env_flag("CHAGEUN_ALLOW_TEST_FIXTURE"),
         SECRET_KEY=os.environ.get("CHAGEUN_SECRET_KEY"),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
