@@ -114,8 +114,14 @@ class MySqlRecordFlowTests(unittest.TestCase):
         self.assertEqual(client.get(path).get_json()["data"], [])
         self.assertEqual(self.write_method(client, "delete", record_path).status_code, 404)
 
-    def test_real_mysql_vehicle_mileage_update_persists_with_account_ownership(self):
+    def test_real_mysql_vehicle_partial_update_persists_with_account_ownership(self):
         client, other = self.clients
+        before = client.get(self.path).get_json()["data"]
+        partial = self.write_method(client, "patch", self.path, {"model": "K5 부분 수정", "year": 2022})
+        self.assertEqual(partial.status_code, 200)
+        self.assertEqual(partial.get_json()["data"]["model"], "K5 부분 수정")
+        self.assertEqual(partial.get_json()["data"]["year"], 2022)
+        self.assertEqual(partial.get_json()["data"]["mileage"], before["mileage"])
         updated = self.write_method(client, "patch", self.path,
                                     {"mileage": 0, "reference_date": "2026-01-31"})
         self.assertEqual(updated.status_code, 200)

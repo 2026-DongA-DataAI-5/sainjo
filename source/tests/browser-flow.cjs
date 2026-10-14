@@ -74,12 +74,13 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     await page.locator('[data-management-content]').filter({ hasText: '기준' }).waitFor();
     check('vehicle stored and server management unavailable state shown');
     await page.goto(`${base}/vehicle`);
-    await page.locator('[data-save-status]').filter({ hasText: '수정' }).waitFor();
+    await page.locator('[data-save-status]').filter({ hasText: '정보 수정' }).waitFor();
     assert.equal(await page.locator('#vehicle-form button[type=submit]').isVisible(), true);
     assert.equal(await page.locator('#model').inputValue(), 'K5');
-    assert.equal(await page.locator('#model').isDisabled(), true);
+    assert.equal(await page.locator('#model').isDisabled(), false);
     assert.equal(await page.locator('#mileage').isDisabled(), false);
     assert.equal(await page.locator('#reference-date').isDisabled(), false);
+    await page.locator('#model-year').fill('2022');
     await page.locator('#mileage').fill('26000');
     const today = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -88,9 +89,10 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     await page.waitForURL('**/dashboard');
     assert.equal(vehiclePatches, 1);
     await page.goto(`${base}/vehicle`);
+    assert.equal(await page.locator('#model-year').inputValue(), '2022');
     assert.equal(await page.locator('#mileage').inputValue(), '26000');
     assert.equal(await page.locator('#reference-date').inputValue(), today);
-    check('vehicle basics stay read only while mileage and measurement date update');
+    check('vehicle details, mileage, and measurement date update and persist');
 
     await page.goto(`${base}/maintenance/new`);
     await page.locator('#work-type').selectOption('replacement');

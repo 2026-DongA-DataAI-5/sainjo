@@ -30,7 +30,7 @@ DUPLICATE_KEY_ERROR = 1062
 
 # 차량 입력 규칙은 schema.sql의 vehicles 제약과 맞춥니다.
 VEHICLE_TEXT_LIMITS = {"manufacturer": 40, "model": 40, "engine": 60, "fuel": 30, "transmission": 40}
-# 최소 식별 입력: 제조사와 모델이 있어야 등록할 수 있습니다. 차량 수정 API는 아직 없으므로 빈 차량을 허용하지 않습니다.
+# 최소 식별 입력: 제조사와 모델이 있어야 차량을 저장할 수 있습니다.
 VEHICLE_REQUIRED_TEXT = {"manufacturer", "model"}
 VEHICLE_GENERATIONS = {"DL3", "JF"}
 VEHICLE_CONDITIONS = {"normal", "severe", "unknown"}
@@ -363,52 +363,29 @@ def get_vehicle(vehicle_id):
     return ok(_vehicle_out(row))
 
 
-def _vehicle_mileage_values(body):
-    editable_fields = {"mileage", "reference_date"}
-    fields = {key: "주행거리와 기준일만 수정할 수 있습니다." for key in set(body) - editable_fields}
-    for key in editable_fields - set(body):
-        fields[key] = "주행거리와 측정 기준일을 함께 보내 주세요."
-
-    mileage = body.get("mileage")
-    if mileage is None or (_is_int(mileage) and 0 <= mileage <= VEHICLE_MILEAGE_MAX):
-        values = {"mileage": mileage}
-    else:
-        fields["mileage"] = f"0~{VEHICLE_MILEAGE_MAX}km 사이의 정수 또는 null을 보내 주세요."
-        values = {}
-
-    reference_date = body.get("reference_date")
-    if reference_date is None:
-        values["reference_date"] = None
-    elif isinstance(reference_date, str) and DATE_PATTERN.fullmatch(reference_date):
-        try:
-            parsed = date.fromisoformat(reference_date)
-            if parsed > _today_korea():
-                raise ValueError
-            values["reference_date"] = parsed
-        except ValueError:
-            fields["reference_date"] = "한국 기준 오늘 이하의 실제 날짜(YYYY-MM-DD) 또는 null을 보내 주세요."
-    else:
-        fields["reference_date"] = "YYYY-MM-DD 형식의 날짜 또는 null을 보내 주세요."
-    return values, fields
-
-
 @api.patch("/vehicles/<int:vehicle_id>")
 @login_required
 @csrf_protected
-def update_vehicle_mileage(vehicle_id):
+def update_vehicle(vehicle_id):
     owner_id = session["user_id"]
-    if vehicles.find_vehicle_by_id_and_owner(vehicle_id, owner_id) is None:
+    current = vehicles.find_vehicle_by_id_and_owner(vehicle_id, owner_id)
+    if current is None:
         return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
     body = _json_body()
-    if body is None:
+    if body is None or not body:
         return fail("VALIDATION_ERROR", "입력을 확인해 주세요", 400, {})
-    values, fields = _vehicle_mileage_values(body)
+
+    # PATCH는 전달한 항목만 바꾸고, 생략한 값은 현재 DB 값으로 유지합니다.
+    merged = _vehicle_out(current)
+    merged.pop("id", None)
+    merged.update(body)
+    values, fields = _vehicle_values(merged)
     if fields:
-        return fail("VALIDATION_ERROR", "주행거리와 측정 기준일을 확인해 주세요", 400, fields)
+        return fail("VALIDATION_ERROR", "차량 정보를 확인해 주세요", 400, fields)
 
     db = get_db()
     try:
-        vehicles.update_mileage_by_id_and_owner(vehicle_id, owner_id, values)
+        vehicles.update_vehicle_by_id_and_owner(vehicle_id, owner_id, values)
         db.commit()
     except Exception:
         db.rollback()

@@ -382,11 +382,13 @@ class FakeVehicles:
                 return self._public(row)
         return None
 
-    def update_mileage_by_id_and_owner(self, vehicle_id, owner_id, values):
+    def update_vehicle_by_id_and_owner(self, vehicle_id, owner_id, values):
         for row in self.rows:
             if row["id"] == vehicle_id and row["owner_id"] == owner_id:
-                row["mileage"] = values["mileage"]
-                row["reference_date"] = values["reference_date"]
+                row.update(values)
+                row["reference_date"] = (
+                    date.fromisoformat(values["reference_date"]) if values["reference_date"] else None
+                )
                 return 1
         return 0
 
@@ -405,8 +407,8 @@ class VehicleApiTest(unittest.TestCase):
             "chageun.api.vehicles.find_vehicle_by_id_and_owner", side_effect=self.vehicles.by_id_and_owner
         ).start()
         mock.patch(
-            "chageun.api.vehicles.update_mileage_by_id_and_owner",
-            side_effect=self.vehicles.update_mileage_by_id_and_owner,
+            "chageun.api.vehicles.update_vehicle_by_id_and_owner",
+            side_effect=self.vehicles.update_vehicle_by_id_and_owner,
         ).start()
         mock.patch("chageun.api.get_db", return_value=self.db).start()
         self.addCleanup(mock.patch.stopall)
@@ -499,7 +501,7 @@ class VehicleApiTest(unittest.TestCase):
         self.assertIsNone(data["reference_date"])
         self.assertEqual(data["conditions"], "unknown")
 
-    def test_patch_vehicle_updates_only_mileage_and_reference_date(self):
+    def test_patch_vehicle_updates_fields_and_preserves_omitted_values(self):
         self.create(self.client_a)
         response = self.patch_vehicle(self.client_a, 1, {"mileage": 0, "reference_date": None})
         self.assertEqual(response.status_code, 200)
@@ -508,6 +510,12 @@ class VehicleApiTest(unittest.TestCase):
         self.assertIsNone(data["reference_date"])
         self.assertEqual(data["model"], VALID_VEHICLE["model"])
         self.assertEqual(self.client_a.get("/api/vehicles/1").get_json()["data"], data)
+        response = self.patch_vehicle(self.client_a, 1, {"model": "K5 부분 수정", "year": 2022})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["data"]["model"], "K5 부분 수정")
+        self.assertEqual(response.get_json()["data"]["year"], 2022)
+        self.assertEqual(response.get_json()["data"]["mileage"], 0)
+        self.assertIsNone(response.get_json()["data"]["reference_date"])
         response = self.patch_vehicle(self.client_a, 1, {"mileage": None, "reference_date": "2026-01-31"})
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.get_json()["data"]["mileage"])
@@ -532,16 +540,20 @@ class VehicleApiTest(unittest.TestCase):
     def test_patch_vehicle_rejects_invalid_payloads_without_changing_vehicle(self):
         self.create(self.client_a)
         invalid_payloads = [
-            {"mileage": 1},
-            {"reference_date": None},
+            {},
+            {"manufacturer": None},
+            {"model": " "},
+            {"model": "M" * 41},
+            {"year": 2036},
+            {"generation": "unknown"},
             {"mileage": -1, "reference_date": None},
             {"mileage": 1000001, "reference_date": None},
             {"mileage": True, "reference_date": None},
             {"mileage": "100", "reference_date": None},
             {"mileage": 10, "reference_date": "2026-02-30"},
             {"mileage": 10, "reference_date": "2999-01-01"},
-            {"mileage": 10, "reference_date": None, "model": "다른 차"},
-            {},
+            {"id": 999},
+            {"not_editable": "value"},
         ]
         for payload in invalid_payloads:
             with self.subTest(payload=payload):
