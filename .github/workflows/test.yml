@@ -49,6 +49,15 @@ jobs:
           conn.commit()
           conn.close()
           PY
+      - name: Verify ordered migrations on disposable legacy database
+        run: python -B source/scripts/check_migrations.py
+        env:
+          CHAGEUN_MIGRATION_TEST_HOST: 127.0.0.1
+          CHAGEUN_MIGRATION_TEST_PORT: 3306
+          CHAGEUN_MIGRATION_TEST_USER: root
+          CHAGEUN_MIGRATION_TEST_PASSWORD: ci-disposable-db-only
+          CHAGEUN_MIGRATION_TEST_DATABASE: chageun_migration_test
+          CHAGEUN_MIGRATION_TEST_CONFIRM: disposable-migration-db
       - run: python -B source/scripts/run_tests.py
       - name: Build mock preview from tracked source
         run: python -B source/scripts/build_pages.py
