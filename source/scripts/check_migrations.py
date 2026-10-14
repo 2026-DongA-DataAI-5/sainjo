@@ -111,8 +111,9 @@ def main():
                     "VALUES (%s, 'maintenance_result', 'brake-pads-discs', 'center', 'inspection')",
                     (vehicle_id,),
                 )
-            except pymysql.err.IntegrityError:
-                pass
+            except pymysql.err.MySQLError as error:
+                if not error.args or error.args[0] != 3819:
+                    raise
             else:
                 raise AssertionError("Database accepted invalid component position 'center'.")
 
