@@ -156,6 +156,7 @@
       "rule_id": "KIA_DL3_2021_G20_BRAKE_INSPECTION_CANDIDATE",
       "item_key": "brake-pads-discs",
       "action": "inspection",
+      "first_interval_km": 10000,
       "interval_km": 10000
     },
     {
@@ -206,6 +207,7 @@
       "rule_id": "KIA_DL3_2021_G20_BALL_JOINT_INSPECTION_CANDIDATE",
       "item_key": "lower-arm-ball-joint",
       "action": "inspection",
+      "first_interval_km": 10000,
       "interval_km": 10000
     },
     {

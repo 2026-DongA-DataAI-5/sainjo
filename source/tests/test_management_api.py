@@ -105,3 +105,43 @@ class ManagementApiTests(unittest.TestCase):
         missing = anonymous.get("/api/vehicles/999/management")
         self.assertEqual(other.status_code, 404)
         self.assertEqual(other.get_json(), missing.get_json())
+
+    def test_brake_and_ball_joint_guidance_is_scoped_to_four_positions(self):
+        response = self.client.get(self.management_path)
+        items = response.get_json()["data"]["items"]
+        for item_key in ("brake-pads-discs", "lower-arm-ball-joint"):
+            scoped = [item for item in items if item["item_key"] == item_key]
+            self.assertEqual(
+                {item["component_position"] for item in scoped},
+                {"front_left", "front_right", "rear_left", "rear_right"},
+            )
+
+    def test_brake_history_does_not_mark_the_opposite_corner_as_recorded(self):
+        record = {
+            **support.VALID_RECORD,
+            "item_key": "brake-pads-discs",
+            "component_position": "front_left",
+            "work_type": "inspection",
+            "date": "2026-01-01",
+            "mileage": 10000,
+        }
+        self.assertEqual(self.post(record).status_code, 201)
+        items = self.client.get(self.management_path).get_json()["data"]["items"]
+        scoped = {item["component_position"]: item for item in items if item["item_key"] == "brake-pads-discs"}
+        self.assertEqual(scoped["front_left"]["history_status"], "recorded")
+        self.assertEqual(scoped["front_right"]["history_status"], "unknown")
+
+    def test_unknown_brake_record_location_is_reported_as_missing_information(self):
+        record = {
+            **support.VALID_RECORD,
+            "item_key": "brake-pads-discs",
+            "component_position": "unknown",
+            "work_type": "inspection",
+            "date": "2026-01-01",
+            "mileage": 10000,
+        }
+        self.assertEqual(self.post(record).status_code, 201)
+        items = self.client.get(self.management_path).get_json()["data"]["items"]
+        front_left = next(item for item in items if item["item_key"] == "brake-pads-discs" and item["component_position"] == "front_left")
+        self.assertEqual(front_left["history_status"], "unknown")
+        self.assertIn("record.component_position", front_left["missing_fields"])

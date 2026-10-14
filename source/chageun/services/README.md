@@ -14,7 +14,7 @@ item = evaluate_management(vehicle, records, rule, as_of_date="2026-06-01")
 - `records`: `vehicle_id`, 항목별 `item_key`, 선택 위치 `component_position`, `kind`, `work_type`, `date`, `mileage`를 가진 사용자 입력 기록입니다. 현재 입력 가능한 항목은 엔진오일, 점화플러그, 구동벨트, 브레이크 패드·디스크, 로워암 볼 조인트입니다. 위치를 모르면 `unknown`으로 저장합니다.
 - `rule`: 기준 사양, 운행조건, 거리·개월 주기, 출처, 확인일, 권한·검토 상태를 포함합니다. 실제 기준은 `rights_status="allowed"`, `review_status="reviewed"`, `is_fixture=False`인 경우에만 계산에 사용합니다. 현재 `candidate_rules.json`의 2021년형 후보는 출처 내용만 확인했으며 재사용 권한 검토가 남아 있어 API가 계산을 보류합니다. 시험 fixture는 `rights_status="test_fixture"`, `review_status="reviewed"`, `is_fixture=True`여야 합니다.
 - `as_of_date`: `YYYY-MM-DD` 형식의 평가 기준일. 서버 또는 호출자가 주입합니다.
-- 반환 dict는 공통 v1.0 필드(`item_key`, `history_status`, `timing_status`, `labels`, `next_mileage`, `next_date`, `reasons`, `missing_fields`, `rule_id`, `source`, `checked_date`, `questions`, `is_fixture`)를 가집니다.
+- 반환 dict는 공통 v1.1 필드(`item_key`, `history_status`, `timing_status`, `labels`, `next_mileage`, `next_date`, `reasons`, `missing_fields`, `rule_id`, `source`, `source_url`, `checked_date`, `questions`, `is_fixture`, `action`, `condition_based`, `component_position`, `interval_km`, `interval_months`, `first_interval_km`, `first_interval_months`)를 가집니다. 출처 URL은 기아 공식 취급설명서 도메인만 링크로 제공합니다.
 
 `timing_status`는 `due`, `upcoming`, `partial`, `unknown`, `unsupported` 중 하나입니다. 도달 여부는 거리·기간 축별로 계산합니다. 계산 가능한 축이 하나라도 도달하면 `due`, 필요한 모든 축이 확인되어 미도달이면 `upcoming`, 일부 축만 계산되면 `partial`입니다. 계산 근거가 없으면 `unknown`, 사양이나 항목이 적용 범위 밖이면 `unsupported`입니다.
 
@@ -24,6 +24,9 @@ item = evaluate_management(vehicle, records, rule, as_of_date="2026-06-01")
 - 운행조건은 기준과 차량 양쪽이 확인되고 일치해야 합니다. `unknown` 조건으로 주기를 확정하지 않습니다.
 - 자료 없음은 미정비를 뜻하지 않습니다. 기록이 없거나 작업유형이 `unknown`뿐이면 이력 상태도 `unknown`입니다.
 - 점검 기록은 이력으로만 남고 교환 기준을 갱신하지 않습니다. `replacement` 기록만 일정을 계산합니다.
+- 브레이크와 로워암 볼 조인트는 앞 왼쪽·앞 오른쪽·뒤 왼쪽·뒤 오른쪽 안내를 각각 반환합니다. 한 위치의 기록은 다른 위치 이력이나 일정을 갱신하지 않습니다. 위치가 불명확한 기존 기록은 해당 위치 이력으로 간주하지 않고 `record.component_position` 확인 대상으로 표시합니다.
+- 작업 종류는 `action`과 질문 문구에 반영합니다. 점검 항목에 교환을 요구하지 않으며, `condition_based` 기준은 고정 교환주기나 다음 점검 날짜를 계산하지 않습니다.
+- 규칙의 `first_interval_km`은 이전 같은 종류 작업 이력이 없는 경우 첫 기준을 제공합니다. 반복 점검은 해당 위치의 점검 기록만 다음 기준 계산에 사용합니다.
 - 날짜가 없는 교환을 `created_at`으로 정렬하거나 정비일로 간주하지 않습니다. 여러 교환의 순서를 정할 수 없거나 날짜·주행거리가 충돌하면 계산을 보류합니다.
 - 현재 주행거리는 `reference_date == as_of_date`일 때만 거리 기준에 사용합니다. 오래된 측정, 누락값, 주행거리 역전은 해당 축을 미확인으로 둡니다.
 - 차량 `id`가 없거나 양의 정수가 아니면 기록을 안전하게 연결할 수 없으므로 계산을 보류하고 `vehicle.id`를 누락 필드로 반환합니다.
@@ -69,7 +72,7 @@ item = evaluate_management(vehicle, records, rule, as_of_date="2026-06-01")
 5. 점검만 받은 기록과 부품을 교환한 기록이 서로 다른 결과를 만든다. 누락된 이력이나 모호한 부품·위치는 확인할 질문으로 연결한다.
 6. 2018년형 JF 등 지원 밖 사양에는 DL3의 기준을 적용하지 않는다. 시연용 가상 이력은 실제 차량의 정비 증빙과 구분한다.
 
-현재까지: 점화플러그·구동벨트·브레이크 패드/디스크·로워암 볼 조인트 후보 기준과 기록 흐름을 연결했습니다. 브레이크·하체에는 구조화된 앞/뒤/좌/우 위치를 저장하고 수정·조회할 수 있습니다. 최초 출고일(또는 최초 등록일 대체값)과 구동벨트 최초 72개월 축, DB 마이그레이션도 포함했습니다. 출처 이용 권한과 검토 승인이 끝나기 전에는 후보 규칙이 운영 계산을 시작하지 않습니다.
+현재까지: 점화플러그·구동벨트·브레이크 패드/디스크·로워암 볼 조인트 후보 기준과 기록 흐름을 연결했습니다. 브레이크·하체에는 구조화된 앞/뒤/좌/우 위치를 저장하고 수정·조회할 수 있으며, 관리 안내도 네 위치별 이력을 독립 처리합니다. 통상조건 브레이크·볼 조인트의 최초 10,000 km 점검 기준, 작업 종류별 질문, 조건부 점검 표시, 공식 출처 링크를 처리합니다. 최초 출고일(또는 최초 등록일 대체값)과 구동벨트 최초 72개월 축, DB 마이그레이션도 포함했습니다. 출처 이용 권한과 검토 승인이 끝나기 전에는 후보 규칙이 운영 계산을 시작하지 않습니다.
 
 남은 순서: (1) 안전한 시험 DB에서 순차 마이그레이션·차량 정보·다섯 관리항목 및 위치의 저장/재조회 확인, (2) 하체 암을 볼 조인트와 별개 부품으로 입력할지 범위를 확정하고 위치별 안내를 점검, (3) 근거 이용 권한 검토와 발표 시나리오를 마무리합니다.
 

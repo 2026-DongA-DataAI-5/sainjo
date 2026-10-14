@@ -10,6 +10,7 @@ from pathlib import Path
 
 TESTS_DIR = Path(__file__).parent
 FIXTURE_PATH = TESTS_DIR / "fixtures" / "management.json"
+RULES_PATH = TESTS_DIR.parent / "chageun" / "services" / "candidate_rules.json"
 MODULE_PATH = TESTS_DIR.parent / "chageun" / "services" / "management.py"
 MODULE_SPEC = importlib.util.spec_from_file_location("management_under_test", MODULE_PATH)
 if MODULE_SPEC is None or MODULE_SPEC.loader is None:
@@ -43,7 +44,9 @@ class ManagementEngineTests(unittest.TestCase):
             {
                 "item_key", "history_status", "timing_status", "labels", "next_mileage",
                 "next_date", "reasons", "missing_fields", "rule_id", "source",
-                "checked_date", "questions", "is_fixture",
+                "source_url", "checked_date", "questions", "is_fixture", "action",
+                "condition_based", "component_position", "interval_km", "interval_months",
+                "first_interval_km", "first_interval_months",
             },
         )
         for field in ("item_key", "history_status", "timing_status"):
@@ -55,6 +58,13 @@ class ManagementEngineTests(unittest.TestCase):
         self.assertTrue(result["next_mileage"] is None or type(result["next_mileage"]) is int)
         self.assertTrue(result["next_date"] is None or isinstance(result["next_date"], str))
         self.assertIsInstance(result["is_fixture"], bool)
+
+    def candidate_rule(self, rule_id):
+        rules = json.loads(RULES_PATH.read_text(encoding="utf-8"))["rules"]
+        rule = copy.deepcopy(next(rule for rule in rules if rule["rule_id"] == rule_id))
+        # This local copy exercises the calculator after review. Production candidates remain gated.
+        rule.update(rights_status="allowed", review_status="reviewed")
+        return rule
 
     def test_fixed_contract_fixture(self):
         result = self.evaluate()
@@ -136,6 +146,42 @@ class ManagementEngineTests(unittest.TestCase):
         self.assertEqual(inspection_result["history_status"], "recorded")
         self.assertEqual(inspection_result["timing_status"], "unknown")
         self.assertIsNone(inspection_result["next_date"])
+
+    def test_inspection_rules_expose_action_and_ask_about_inspection_history(self):
+        rule = self.candidate_rule("KIA_DL3_2021_G20_BRAKE_INSPECTION_CANDIDATE")
+        result = self.evaluate(records=[], rule=rule)
+        self.assertEqual(result["action"], "inspection")
+        self.assertIn("점검", result["questions"][0])
+        self.assertNotIn("교환", result["questions"][0])
+        self.assertEqual(result["source_url"], rule["source_url"])
+
+    def test_position_scoped_history_does_not_cross_to_the_other_corner(self):
+        rule = self.candidate_rule("KIA_DL3_2021_G20_BRAKE_INSPECTION_CANDIDATE")
+        record = copy.deepcopy(self.case["input"]["records"][0])
+        record.update(item_key="brake-pads-discs", work_type="inspection", component_position="front_left")
+
+        other_corner = evaluate_management(
+            copy.deepcopy(self.case["input"]["vehicle"]), [record], rule,
+            self.case["input"]["as_of_date"], component_position="front_right",
+        )
+        same_corner = evaluate_management(
+            copy.deepcopy(self.case["input"]["vehicle"]), [record], rule,
+            self.case["input"]["as_of_date"], component_position="front_left",
+        )
+        self.assertEqual(other_corner["history_status"], "unknown")
+        self.assertEqual(other_corner["component_position"], "front_right")
+        self.assertEqual(same_corner["history_status"], "recorded")
+
+    def test_first_mileage_only_inspection_is_due_without_claiming_no_service(self):
+        rule = self.candidate_rule("KIA_DL3_2021_G20_BRAKE_INSPECTION_CANDIDATE")
+        vehicle = copy.deepcopy(self.case["input"]["vehicle"])
+        vehicle.update(mileage=90_000, reference_date=self.case["input"]["as_of_date"])
+        rule["first_interval_km"] = 10_000
+        result = evaluate_management(vehicle, [], rule, self.case["input"]["as_of_date"])
+        self.assertEqual(result["timing_status"], "due")
+        self.assertEqual(result["history_status"], "unknown")
+        self.assertIn("records", result["missing_fields"])
+        self.assertEqual(result["action"], "inspection")
 
     def test_unknown_work_type_is_not_a_known_history(self):
         record = copy.deepcopy(self.case["input"]["records"][0])
@@ -390,7 +436,9 @@ class ManagementEngineTests(unittest.TestCase):
                     {
                         "item_key", "history_status", "timing_status", "labels", "next_mileage",
                         "next_date", "reasons", "missing_fields", "rule_id", "source",
-                        "checked_date", "questions", "is_fixture",
+                        "source_url", "checked_date", "questions", "is_fixture", "action",
+                        "condition_based", "component_position", "interval_km", "interval_months",
+                        "first_interval_km", "first_interval_months",
                     },
                 )
 
@@ -485,7 +533,9 @@ class ManagementEngineTests(unittest.TestCase):
             {
                 "item_key", "history_status", "timing_status", "labels", "next_mileage",
                 "next_date", "reasons", "missing_fields", "rule_id", "source",
-                "checked_date", "questions", "is_fixture",
+                "source_url", "checked_date", "questions", "is_fixture", "action",
+                "condition_based", "component_position", "interval_km", "interval_months",
+                "first_interval_km", "first_interval_months",
             },
         )
 

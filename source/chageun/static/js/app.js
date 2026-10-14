@@ -39,6 +39,7 @@
   const KIND_LABELS = { previous_history: '이전 이력 입력', maintenance_result: '정비 결과 입력' };
   const ITEM_LABELS = { 'engine-oil': '엔진 오일·오일필터', 'air-filter': '엔진 에어클리너 필터', coolant: '냉각수', 'spark-plugs': '점화플러그', 'drive-belt': '구동벨트', 'brake-pads-discs': '브레이크 패드·디스크', 'lower-arm-ball-joint': '로워암 볼 조인트' };
   const POSITION_LABELS = { unknown: '위치 미확인', front: '앞쪽', rear: '뒤쪽', left: '왼쪽', right: '오른쪽', front_left: '앞 왼쪽', front_right: '앞 오른쪽', rear_left: '뒤 왼쪽', rear_right: '뒤 오른쪽' };
+  const ACTION_LABELS = { inspection: '점검', replacement: '교환' };
 
   function appPath(path) {
     return `${APP_BASE_PATH}${path.startsWith('/') ? path : `/${path}`}`;
@@ -610,13 +611,32 @@
           for (const label of item.labels) appendText(badges, 'span', 'badge', label);
           if (item.is_fixture) appendText(badges, 'span', 'badge unknown', '가상 시험 기준');
           const title = appendText(main, 'h3', '', '');
-          const link = appendText(title, 'a', '', ITEM_LABELS[item.item_key] || '관리항목');
+          const positionLabel = POSITION_LABELS[item.component_position];
+          const titleText = `${ITEM_LABELS[item.item_key] || '관리항목'}${positionLabel ? ` · ${positionLabel}` : ''}`;
+          const link = appendText(title, 'a', '', titleText);
           link.href = appPath(`/items/${encodeURIComponent(item.item_key)}`);
           for (const reason of item.reasons) appendText(main, 'p', '', reason);
+          if (item.timing_status !== 'unknown' && item.timing_status !== 'unsupported' && item.action) {
+            const actionText = item.condition_based ? '안내 방식: 부품 상태 점검 후 필요 시 정비' : `안내 방식: 정기 ${ACTION_LABELS[item.action]}`;
+            appendText(main, 'p', 'muted', actionText);
+          }
           appendText(main, 'p', 'muted', `거리 기준: ${formatMileage(item.next_mileage)} · 기간 기준: ${item.next_date || '미확인'}`);
           appendText(main, 'small', 'muted', `기준 출처: ${item.source || '미확정'} · 기준 확인일: ${item.checked_date || '미확인'}`);
+          if (typeof item.source_url === 'string') {
+            try {
+              const sourceUrl = new URL(item.source_url);
+              if (sourceUrl.protocol === 'https:' && sourceUrl.hostname === 'ownersmanual.kia.com') {
+                const sourceLink = appendText(main, 'a', 'muted', '기아 공식 취급설명서 열기');
+                sourceLink.href = sourceUrl.href;
+                sourceLink.target = '_blank';
+                sourceLink.rel = 'noopener noreferrer';
+              }
+            } catch (_) {
+              // Invalid source URLs are omitted instead of becoming clickable links.
+            }
+          }
           if (item.missing_fields.length) {
-            const labels = { rule: '적용 기준', records: '교환 기록', 'vehicle.id': '차량 ID' };
+            const labels = { rule: '적용 기준', records: '이전 관리 기록', 'vehicle.id': '차량 ID' };
             const missing = item.missing_fields.map((field) => FIELD_LABELS[field.replace(/^(vehicle|record)\./, '')] || labels[field] || field);
             appendText(main, 'p', 'muted', `부족한 정보: ${missing.join(' · ')}`);
           }

@@ -587,7 +587,17 @@ def get_management(vehicle_id):
         calculation_mode = "test_fixture"
     as_of_date = current_app.config.get("CHAGEUN_MANAGEMENT_AS_OF_DATE") or _today_korea().isoformat()
     items = [_record_out(row) for row in records.list_records_for_management(vehicle_id)]
-    evaluated = [evaluate_management(_vehicle_out(vehicle), items, rule, as_of_date) for rule in rules]
+    positional_item_keys = {"brake-pads-discs", "lower-arm-ball-joint"}
+    positions = ("front_left", "front_right", "rear_left", "rear_right")
+    evaluated = []
+    for rule in rules:
+        if isinstance(rule, dict) and rule.get("item_key") in positional_item_keys:
+            evaluated.extend(
+                evaluate_management(_vehicle_out(vehicle), items, rule, as_of_date, component_position=position)
+                for position in positions
+            )
+        else:
+            evaluated.append(evaluate_management(_vehicle_out(vehicle), items, rule, as_of_date))
     return ok({"vehicle_id": vehicle_id, "items": evaluated}, calculation_mode=calculation_mode)
 
 
