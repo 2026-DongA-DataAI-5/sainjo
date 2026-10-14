@@ -579,6 +579,12 @@ class VehicleApiTest(unittest.TestCase):
         error = self.assert_error(self.create(self.client_a, {}), 400, "VALIDATION_ERROR")
         self.assertEqual(set(error["error"]["fields"]), {"manufacturer", "model"})
 
+    def test_future_reference_date_is_rejected(self):
+        response = self.create(self.client_a, {**VALID_VEHICLE, "reference_date": "2999-01-01"})
+        body = self.assert_error(response, 400, "VALIDATION_ERROR")
+        self.assertIn("reference_date", body["error"]["fields"])
+        self.assertEqual(self.vehicles.rows, [])
+
     def test_blank_strings_are_400_and_null_is_the_way_to_say_unknown(self):
         blanks = {
             "manufacturer": "현대",

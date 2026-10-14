@@ -272,10 +272,11 @@ def _vehicle_values(body):
         values["reference_date"] = None
     elif isinstance(reference_date, str) and DATE_PATTERN.fullmatch(reference_date):
         try:
-            date.fromisoformat(reference_date)
+            if date.fromisoformat(reference_date) > _today_korea():
+                raise ValueError
             values["reference_date"] = reference_date
         except ValueError:
-            reject("reference_date", "YYYY-MM-DD 형식의 실제 날짜를 입력해 주세요.")
+            reject("reference_date", "한국 기준 오늘 이하의 실제 날짜(YYYY-MM-DD)를 입력해 주세요.")
     else:
         reject("reference_date", "YYYY-MM-DD 형식의 날짜를 입력해 주세요. 모르면 null을 보내 주세요.")
 
