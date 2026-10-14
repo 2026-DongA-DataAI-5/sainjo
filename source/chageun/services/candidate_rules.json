@@ -2,98 +2,6 @@
   "source_notice": "Candidate rules are source-checked, but their reuse rights are not confirmed. They must not be used for live calculations until rights and review are explicitly approved.",
   "rules": [
     {
-      "applicability": {
-        "manufacturer": "기아",
-        "model": "K5",
-        "generation": "DL3",
-        "years": [2021],
-        "engine": "G2.0 CVVL",
-        "fuel": "가솔린",
-        "transmission": "자동"
-      },
-      "official_engine_name": "스마트스트림 G2.0 CVVL",
-      "conditions": "normal",
-      "source": "기아 2021년형 K5 DL3 취급설명서 정기 점검 - 브레이크 패드 및 디스크",
-      "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
-      "checked_date": "2026-10-14",
-      "rights_status": "pending_confirmation",
-      "review_status": "source_checked_pending_approval",
-      "is_fixture": false,
-      "rule_id": "KIA_DL3_2021_G20_BRAKE_INSPECTION_CANDIDATE",
-      "item_key": "brake-pads-discs",
-      "action": "inspection",
-      "interval_km": 10000
-    },
-    {
-      "applicability": {
-        "manufacturer": "기아",
-        "model": "K5",
-        "generation": "DL3",
-        "years": [2021],
-        "engine": "G2.0 CVVL",
-        "fuel": "가솔린",
-        "transmission": "자동"
-      },
-      "official_engine_name": "스마트스트림 G2.0 CVVL",
-      "conditions": "severe",
-      "source": "기아 2021년형 K5 DL3 취급설명서 가혹 조건 - 브레이크 디스크 및 패드",
-      "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
-      "checked_date": "2026-10-14",
-      "rights_status": "pending_confirmation",
-      "review_status": "source_checked_pending_approval",
-      "is_fixture": false,
-      "rule_id": "KIA_DL3_2021_G20_BRAKE_SEVERE_CANDIDATE",
-      "item_key": "brake-pads-discs",
-      "action": "inspection",
-      "condition_based": true
-    },
-    {
-      "applicability": {
-        "manufacturer": "기아",
-        "model": "K5",
-        "generation": "DL3",
-        "years": [2021],
-        "engine": "G2.0 CVVL",
-        "fuel": "가솔린",
-        "transmission": "자동"
-      },
-      "official_engine_name": "스마트스트림 G2.0 CVVL",
-      "conditions": "normal",
-      "source": "기아 2021년형 K5 DL3 취급설명서 정기 점검 - 로워암 볼 조인트",
-      "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
-      "checked_date": "2026-10-14",
-      "rights_status": "pending_confirmation",
-      "review_status": "source_checked_pending_approval",
-      "is_fixture": false,
-      "rule_id": "KIA_DL3_2021_G20_BALL_JOINT_INSPECTION_CANDIDATE",
-      "item_key": "lower-arm-ball-joint",
-      "action": "inspection",
-      "interval_km": 10000
-    },
-    {
-      "applicability": {
-        "manufacturer": "기아",
-        "model": "K5",
-        "generation": "DL3",
-        "years": [2021],
-        "engine": "G2.0 CVVL",
-        "fuel": "가솔린",
-        "transmission": "자동"
-      },
-      "official_engine_name": "스마트스트림 G2.0 CVVL",
-      "conditions": "severe",
-      "source": "기아 2021년형 K5 DL3 취급설명서 가혹 조건 - 로워암 볼 조인트",
-      "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
-      "checked_date": "2026-10-14",
-      "rights_status": "pending_confirmation",
-      "review_status": "source_checked_pending_approval",
-      "is_fixture": false,
-      "rule_id": "KIA_DL3_2021_G20_BALL_JOINT_SEVERE_CANDIDATE",
-      "item_key": "lower-arm-ball-joint",
-      "action": "inspection",
-      "condition_based": true
-    },
-    {
       "rule_id": "KIA_DL3_2021_G20_OIL_NORMAL_CANDIDATE",
       "item_key": "engine-oil",
       "action": "replacement",
@@ -185,6 +93,31 @@
         "transmission": "자동"
       },
       "official_engine_name": "스마트스트림 G2.0 CVVL",
+      "conditions": "severe",
+      "source": "기아 2021년형 K5 DL3 취급설명서 정기 점검 - 가혹조건",
+      "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
+      "checked_date": "2026-10-14",
+      "rights_status": "pending_confirmation",
+      "review_status": "source_checked_pending_approval",
+      "is_fixture": false,
+      "rule_id": "KIA_DL3_2021_G20_SPARK_PLUG_SEVERE_CANDIDATE",
+      "item_key": "spark-plugs",
+      "action": "inspection",
+      "condition_based": true
+    },
+    {
+      "applicability": {
+        "manufacturer": "기아",
+        "model": "K5",
+        "generation": "DL3",
+        "years": [
+          2021
+        ],
+        "engine": "G2.0 CVVL",
+        "fuel": "가솔린",
+        "transmission": "자동"
+      },
+      "official_engine_name": "스마트스트림 G2.0 CVVL",
       "conditions": "any",
       "source": "기아 2021년형 K5 DL3 취급설명서 정기 점검",
       "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
@@ -213,15 +146,90 @@
         "transmission": "자동"
       },
       "official_engine_name": "스마트스트림 G2.0 CVVL",
-      "conditions": "severe",
-      "source": "기아 2021년형 K5 DL3 취급설명서 정기 점검 - 가혹조건",
+      "conditions": "normal",
+      "source": "기아 2021년형 K5 DL3 취급설명서 정기 점검 - 브레이크 패드 및 디스크",
       "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
       "checked_date": "2026-10-14",
       "rights_status": "pending_confirmation",
       "review_status": "source_checked_pending_approval",
       "is_fixture": false,
-      "rule_id": "KIA_DL3_2021_G20_SPARK_PLUG_SEVERE_CANDIDATE",
-      "item_key": "spark-plugs",
+      "rule_id": "KIA_DL3_2021_G20_BRAKE_INSPECTION_CANDIDATE",
+      "item_key": "brake-pads-discs",
+      "action": "inspection",
+      "interval_km": 10000
+    },
+    {
+      "applicability": {
+        "manufacturer": "기아",
+        "model": "K5",
+        "generation": "DL3",
+        "years": [
+          2021
+        ],
+        "engine": "G2.0 CVVL",
+        "fuel": "가솔린",
+        "transmission": "자동"
+      },
+      "official_engine_name": "스마트스트림 G2.0 CVVL",
+      "conditions": "severe",
+      "source": "기아 2021년형 K5 DL3 취급설명서 가혹 조건 - 브레이크 디스크 및 패드",
+      "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
+      "checked_date": "2026-10-14",
+      "rights_status": "pending_confirmation",
+      "review_status": "source_checked_pending_approval",
+      "is_fixture": false,
+      "rule_id": "KIA_DL3_2021_G20_BRAKE_SEVERE_CANDIDATE",
+      "item_key": "brake-pads-discs",
+      "action": "inspection",
+      "condition_based": true
+    },
+    {
+      "applicability": {
+        "manufacturer": "기아",
+        "model": "K5",
+        "generation": "DL3",
+        "years": [
+          2021
+        ],
+        "engine": "G2.0 CVVL",
+        "fuel": "가솔린",
+        "transmission": "자동"
+      },
+      "official_engine_name": "스마트스트림 G2.0 CVVL",
+      "conditions": "normal",
+      "source": "기아 2021년형 K5 DL3 취급설명서 정기 점검 - 로워암 볼 조인트",
+      "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
+      "checked_date": "2026-10-14",
+      "rights_status": "pending_confirmation",
+      "review_status": "source_checked_pending_approval",
+      "is_fixture": false,
+      "rule_id": "KIA_DL3_2021_G20_BALL_JOINT_INSPECTION_CANDIDATE",
+      "item_key": "lower-arm-ball-joint",
+      "action": "inspection",
+      "interval_km": 10000
+    },
+    {
+      "applicability": {
+        "manufacturer": "기아",
+        "model": "K5",
+        "generation": "DL3",
+        "years": [
+          2021
+        ],
+        "engine": "G2.0 CVVL",
+        "fuel": "가솔린",
+        "transmission": "자동"
+      },
+      "official_engine_name": "스마트스트림 G2.0 CVVL",
+      "conditions": "severe",
+      "source": "기아 2021년형 K5 DL3 취급설명서 가혹 조건 - 로워암 볼 조인트",
+      "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
+      "checked_date": "2026-10-14",
+      "rights_status": "pending_confirmation",
+      "review_status": "source_checked_pending_approval",
+      "is_fixture": false,
+      "rule_id": "KIA_DL3_2021_G20_BALL_JOINT_SEVERE_CANDIDATE",
+      "item_key": "lower-arm-ball-joint",
       "action": "inspection",
       "condition_based": true
     }
