@@ -1,5 +1,5 @@
 // 차량·관리 기록 화면을 API 클라이언트(ChageunApi)에 연결합니다.
-// 현재는 mock 모드입니다. 서버 연결 후에도 같은 호출을 사용하고, mode만 live로 바뀝니다.
+// mock 미리보기와 live 서버 자료를 명시적으로 구분합니다.
 // 판단 로직(교환 시기 계산)은 여기에 두지 않습니다. 서버 응답을 그대로 표시합니다.
 (function () {
   'use strict';
@@ -7,6 +7,9 @@
   const api = window.ChageunApi;
   const QUESTION_STORAGE_KEY = 'chageun.questions.v1';
   const APP_BASE_PATH = document.documentElement.dataset.basePath || '';
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted && api.mode === 'live') window.location.reload();
+  });
 
   const FIELD_LABELS = {
     manufacturer: '제조사',
@@ -97,6 +100,7 @@
       try {
         await handler();
       } catch (error) {
+        if (api.mode === 'live' && error.status === 401) redirectToLogin();
         showMessage(message, errorText(error));
       } finally {
         busy = false;
@@ -111,8 +115,14 @@
   }
 
   async function loadRecords(vehicleId) {
-    const body = await api.records.list(vehicleId, { page: 1, pageSize: 100 });
-    return body.data;
+    const records = [];
+    let page = 1;
+    while (true) {
+      const body = await api.records.list(vehicleId, { page, pageSize: 100 });
+      records.push(...body.data);
+      if (body.data.length < 100 || records.length >= body.meta.pagination.total) return records;
+      page += 1;
+    }
   }
 
   function readSelectedQuestions() {
@@ -154,11 +164,28 @@
   }
 
   async function initVehicleForm(form) {
+    const status = form.querySelector('.form-message');
+    lockForm(form, true);
+    showMessage(status, '차량 정보를 불러오는 중입니다.');
     try {
       const vehicle = await loadVehicle();
       if (vehicle) fillVehicleForm(form, vehicle);
+      if (vehicle && api.mode === 'live') {
+        form.dataset.readOnly = 'true';
+        form.querySelectorAll('input, select').forEach((field) => { field.disabled = true; });
+        form.querySelector('button[type="submit"]').hidden = true;
+        form.querySelector('[data-save-status]').textContent = '등록된 차량 · 조회';
+        showMessage(status, '등록된 차량입니다. 현재는 차량 수정 기능을 지원하지 않습니다.');
+      } else {
+        showMessage(status, '');
+      }
     } catch (error) {
-      showMessage(form.querySelector('.form-message'), errorText(error));
+      form.dataset.loadFailed = 'true';
+      if (api.mode === 'live' && error.status === 401) redirectToLogin();
+      showMessage(status, errorText(error));
+    } finally {
+      lockForm(form, false);
+      if (form.dataset.loadFailed) form.querySelector('button[type="submit"]').disabled = true;
     }
   }
 
@@ -190,9 +217,16 @@
     title.textContent = ITEM_LABELS[record.item_key] || '관리항목 미확인';
     details.append(title);
     appendText(details, 'p', '', record.result || '추가 메모 없음');
-    const savedAt = typeof record.created_at === 'string' ? record.created_at.slice(0, 16).replace('T', ' ') : '미확인';
-    appendText(details, 'small', 'muted', `출처: ${textOrUnknown(record.source)} · 자료 확인일: ${record.checked_date || '미확인'} · 등록: ${savedAt}`);
+    const savedDate = new Date(record.created_at);
+    const savedAt = typeof record.created_at === 'string' && !Number.isNaN(savedDate.getTime())
+      ? savedDate.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false }) : '미확인';
+    appendText(details, 'small', 'muted', `출처: ${textOrUnknown(record.source)} · 자료 확인일: ${record.checked_date || '미확인'} · 등록(한국 시간): ${savedAt}`);
     appendText(details, 'small', 'record-limit-note', '사용자 입력 · 외부 자료와 자동 대조되지 않음');
+
+    if (api.mode === 'live') {
+      entry.append(details);
+      return entry;
+    }
 
     const removeButton = appendText(details, 'button', 'record-delete', '이 기록 삭제');
     removeButton.type = 'button';
@@ -237,8 +271,10 @@
 
   async function renderTimeline(list, status) {
     list.replaceChildren();
+    appendText(list, 'p', 'muted', '기록을 불러오는 중입니다.');
     try {
       const vehicle = await loadVehicle();
+      list.replaceChildren();
       if (!vehicle) {
         appendText(list, 'p', 'muted', '차량 정보를 먼저 저장하면 기록이 여기에 표시됩니다.');
         return;
@@ -252,6 +288,8 @@
         list.append(recordCard(record, status, () => renderTimeline(list, status)));
       }
     } catch (error) {
+      list.replaceChildren();
+      if (api.mode === 'live' && error.status === 401) redirectToLogin();
       appendText(list, 'p', 'muted', errorText(error));
     }
   }
@@ -269,7 +307,7 @@
           exportedAt: new Date().toISOString(),
           vehicle,
           records,
-          selectedQuestions: readSelectedQuestions(),
+          selectedQuestions: api.mode === 'live' ? [] : readSelectedQuestions(),
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
         const objectUrl = URL.createObjectURL(blob);
@@ -294,7 +332,7 @@
     const specs = vehicle
       ? [vehicle.year && `${vehicle.year}년식`, vehicle.engine, vehicle.fuel, vehicle.transmission].filter(Boolean)
       : [];
-    summary.querySelector('[data-vehicle-label]').textContent = vehicle ? '내 차량 (미리보기 저장)' : '차량 정보 없음';
+    summary.querySelector('[data-vehicle-label]').textContent = vehicle ? (api.mode === 'live' ? '내 차량 · 서버 자료' : '내 차량 (미리보기 저장)') : '차량 정보 없음';
     summary.querySelector('[data-vehicle-name]').textContent = vehicle ? name || '차량 정보 미확인' : '차량을 먼저 등록해 주세요';
     summary.querySelector('[data-vehicle-spec]').textContent = vehicle ? specs.join(' · ') || '세부 사양 미확인' : '';
     summary.querySelector('[data-vehicle-mileage]').textContent = numberText(vehicle ? vehicle.mileage : null);
@@ -312,21 +350,6 @@
 
   // ───────────────────────── 대시보드 로그인 상태 (서버 모드) ─────────────────────────
   // 서버 모드에서만 /api/auth/me를 호출합니다. 공개 정보인 아이디만 표시하고, 아이디·비밀번호는 저장소나 로그에 남기지 않습니다.
-  // 차량·기록 API는 아직 서버에 없으므로 서버 모드에서는 불러오지 않고 "아직 연결되지 않음"으로 표시합니다.
-  function showVehicleNotConnected(summary, list) {
-    if (summary) {
-      summary.querySelector('[data-vehicle-label]').textContent = '서버 연결 전';
-      summary.querySelector('[data-vehicle-name]').textContent = '차량 정보는 아직 서버에 연결되지 않았습니다';
-      summary.querySelector('[data-vehicle-spec]').textContent = '';
-      summary.querySelector('[data-vehicle-mileage]').textContent = '확인 불가';
-      summary.querySelector('[data-vehicle-date]').textContent = '확인 불가';
-    }
-    if (list) {
-      list.replaceChildren();
-      appendText(list, 'p', 'muted', '관리 기록은 아직 서버에 연결되지 않았습니다.');
-    }
-  }
-
   // 401은 로그인되지 않았거나 세션이 유효하지 않은 경우입니다. 서버 응답만으로는 둘을 구분할 수 없으므로 만료 안내를 붙이지 않습니다.
   function redirectToLogin() {
     window.location.assign(appPath('/login?required=1'));
@@ -350,6 +373,7 @@
         showMessage(message, '로그아웃하는 중입니다.');
         try {
           await api.auth.logout();
+          document.querySelector('#main').replaceChildren();
           window.location.assign(appPath('/login'));
         } catch (error) {
           if (error && error.status === 401) {
@@ -360,16 +384,18 @@
           showMessage(message, '로그아웃하지 못했습니다. 잠시 후 다시 시도해 주세요.');
         }
       });
+      return true;
     } catch (error) {
       if (error && error.status === 401) {
         // 로그인되지 않았거나 세션이 유효하지 않은 상태입니다. 두 경우를 구분할 수 없으므로 로그인 필요 안내로 보냅니다.
         showMessage(message, '로그인이 필요합니다. 로그인 화면으로 이동합니다.');
         redirectToLogin();
-        return;
+        return false;
       }
       userRow.hidden = true;
       const offline = error && error.status === 0;
       showMessage(message, offline ? '서버에 연결하지 못해 로그인 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.' : '서버 오류로 로그인 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      return false;
     }
   }
 
@@ -379,9 +405,14 @@
     let summaryReady = false;
     if (api.mode === 'live') {
       const accountBox = document.querySelector('[data-account-status]');
-      if (accountBox) initAccountStatus(accountBox);
-      showVehicleNotConnected(summary, list);
-      return;
+      if (accountBox && !await initAccountStatus(accountBox)) {
+        if (summary) renderVehicleError(summary, new Error('로그인 상태를 확인하지 못했습니다.'));
+        if (list) list.textContent = '로그인 상태 확인 후 기록을 불러올 수 있습니다.';
+        const content = document.querySelector('[data-management-content]');
+        if (content) content.textContent = '로그인 상태 확인 후 관리 안내를 불러올 수 있습니다.';
+        showMessage(document.querySelector('[data-demo-data-note]'), '로그인 상태를 확인하지 못했습니다.');
+        return;
+      }
     }
     try {
       const vehicle = await loadVehicle();
@@ -407,12 +438,73 @@
           if (records.length > 3) appendText(list, 'p', 'muted', `최근 3건을 표시했습니다. 나머지 ${records.length - 3}건은 타임라인에서 확인할 수 있습니다.`);
         }
       }
+      if (api.mode === 'live') await initManagement(vehicle);
     } catch (error) {
+      if (api.mode === 'live' && error.status === 401) redirectToLogin();
+      showMessage(document.querySelector('[data-demo-data-note]'), errorText(error));
+      const content = document.querySelector('[data-management-content]');
+      if (content) content.textContent = '자료 조회에 실패해 관리 안내를 표시할 수 없습니다.';
       if (summary && !summaryReady) renderVehicleError(summary, error);
       if (list) {
         list.replaceChildren();
         appendText(list, 'p', 'muted', errorText(error));
       }
+    }
+  }
+
+  async function initManagement(suppliedVehicle) {
+    const content = document.querySelector('[data-management-content]');
+    const questions = document.querySelector('[data-management-questions]');
+    const note = document.querySelector('[data-demo-data-note]');
+    if (content) content.textContent = '관리 안내를 불러오는 중입니다.';
+    if (questions) questions.replaceChildren();
+    try {
+      const vehicle = suppliedVehicle === undefined ? await loadVehicle() : suppliedVehicle;
+      if (!vehicle) {
+        if (content) content.textContent = '차량을 등록하면 관리 안내를 확인할 수 있습니다.';
+        showMessage(note, '등록된 차량이 없습니다.');
+        if (questions) questions.textContent = '차량 등록 후 확인 질문이 표시됩니다.';
+        return;
+      }
+      const body = await api.management.get(vehicle.id);
+      showMessage(note, body.meta.calculation_mode === 'test_fixture'
+        ? '가상 시험 기준으로 계산한 결과입니다. 실제 제조사 권장 주기가 아닙니다.'
+        : '실제 제조사 관리기준이 미확정입니다. 입력 이력은 확인할 수 있지만 교환 시점은 확정하지 않습니다.');
+      if (content) content.replaceChildren();
+      for (const item of body.data.items) {
+        if (content) {
+          const row = appendText(content, 'article', 'maintenance-row', '');
+          row.dataset.labels = item.labels.join('|');
+          const main = appendText(row, 'div', 'item-main', '');
+          const badges = appendText(main, 'div', 'badge-row', '');
+          for (const label of item.labels) appendText(badges, 'span', 'badge', label);
+          if (item.is_fixture) appendText(badges, 'span', 'badge unknown', '가상 시험 기준');
+          const title = appendText(main, 'h3', '', '');
+          const link = appendText(title, 'a', '', ITEM_LABELS[item.item_key] || '관리항목');
+          link.href = appPath(`/items/${encodeURIComponent(item.item_key)}`);
+          for (const reason of item.reasons) appendText(main, 'p', '', reason);
+          appendText(main, 'p', 'muted', `거리 기준: ${formatMileage(item.next_mileage)} · 기간 기준: ${item.next_date || '미확인'}`);
+          appendText(main, 'small', 'muted', `기준 출처: ${item.source || '미확정'} · 기준 확인일: ${item.checked_date || '미확인'}`);
+          if (item.missing_fields.length) {
+            const labels = { rule: '적용 기준', records: '교환 기록', 'vehicle.id': '차량 ID' };
+            const missing = item.missing_fields.map((field) => FIELD_LABELS[field.replace(/^(vehicle|record)\./, '')] || labels[field] || field);
+            appendText(main, 'p', 'muted', `부족한 정보: ${missing.join(' · ')}`);
+          }
+        }
+        if (questions) {
+          for (const question of item.questions) appendText(questions, 'p', '', question);
+        }
+      }
+      document.querySelectorAll('.status-count[data-label]').forEach((counter) => {
+        const count = body.data.items.filter((item) => item.labels.includes(counter.dataset.label)).length;
+        counter.replaceChildren(document.createTextNode(String(count)));
+        appendText(counter, 'small', '', '개 항목');
+      });
+    } catch (error) {
+      if (error.status === 401) redirectToLogin();
+      if (content) content.textContent = errorText(error);
+      if (questions) questions.textContent = errorText(error);
+      showMessage(note, '관리 안내를 불러오지 못했습니다.');
     }
   }
 
@@ -435,8 +527,12 @@
   if (vehicleForm) {
     initVehicleForm(vehicleForm);
     guardedSubmit(vehicleForm, async () => {
+      if (vehicleForm.dataset.readOnly === 'true') return;
       const payload = vehicleFromForm(vehicleForm);
       const current = await loadVehicle();
+      if (current && api.mode === 'live') {
+        throw new api.ApiError({ status: 409, code: 'CONFLICT', message: '이미 등록된 차량이 있습니다. 현재는 수정할 수 없습니다.' });
+      }
       if (current) await api.vehicles.update(current.id, payload);
       else await api.vehicles.create(payload);
       window.location.assign(appPath('/dashboard'));
@@ -453,6 +549,8 @@
 
   if (document.querySelector('[data-vehicle-summary]') || document.querySelector('[data-dashboard-records]')) {
     initDashboard();
+  } else if (api.mode === 'live' && (document.querySelector('[data-management-content]') || document.querySelector('[data-management-questions]'))) {
+    initManagement();
   }
 
   // 대시보드 필터

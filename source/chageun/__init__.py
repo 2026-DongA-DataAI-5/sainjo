@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 
 
 def _env_flag(name):
@@ -48,6 +48,8 @@ def create_app(test_config=None):
 
     @app.after_request
     def add_headers(response):
+        if request.path.startswith("/api/") or (app.config["CHAGEUN_SERVER_MODE"] and not request.path.startswith("/static/")):
+            response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = (

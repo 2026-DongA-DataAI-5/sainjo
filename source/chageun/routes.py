@@ -7,7 +7,7 @@ pages = Blueprint("pages", __name__)
 
 @pages.app_context_processor
 def common_context():
-    return {"vehicle": DEMO_VEHICLE, "status_labels": STATUS_LABELS}
+    return {"vehicle": DEMO_VEHICLE, "status_labels": STATUS_LABELS, "api_mode": _auth_api_mode()}
 
 
 @pages.get("/")
@@ -44,7 +44,7 @@ def start():
 
 @pages.get("/dashboard")
 def dashboard():
-    return render_template("dashboard.html", title="관리 대시보드", items=DEMO_ITEMS, api_mode=_auth_api_mode())
+    return render_template("dashboard.html", title="관리 대시보드", items=[] if _auth_api_mode() == "live" else DEMO_ITEMS)
 
 
 @pages.get("/vehicle")
@@ -54,16 +54,20 @@ def vehicle():
 
 @pages.get("/history/new")
 def history_new():
-    return render_template("record_form.html", title="이전 관리이력 입력", is_result=False, items=DEMO_ITEMS)
+    return render_template("record_form.html", title="이전 관리이력 입력", is_result=False,
+                           items=DEMO_ITEMS[:1] if _auth_api_mode() == "live" else DEMO_ITEMS)
 
 
 @pages.get("/maintenance/new")
 def maintenance_new():
-    return render_template("record_form.html", title="정비 결과 입력", is_result=True, items=DEMO_ITEMS)
+    return render_template("record_form.html", title="정비 결과 입력", is_result=True,
+                           items=DEMO_ITEMS[:1] if _auth_api_mode() == "live" else DEMO_ITEMS)
 
 
 @pages.get("/items/<item_key>")
 def item_detail(item_key):
+    if _auth_api_mode() == "live" and item_key != "engine-oil":
+        abort(404)
     item = next((entry for entry in DEMO_ITEMS if entry["key"] == item_key), None)
     if item is None:
         abort(404)
@@ -78,7 +82,7 @@ def questions():
 
 @pages.get("/timeline")
 def timeline():
-    return render_template("timeline.html", title="관리 타임라인", records=DEMO_HISTORY)
+    return render_template("timeline.html", title="관리 타임라인", records=[] if _auth_api_mode() == "live" else DEMO_HISTORY)
 
 
 @pages.get("/api/health")

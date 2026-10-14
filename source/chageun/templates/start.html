@@ -11,6 +11,6 @@
   </ol>
   <div class="start-actions"><a class="button primary" href="{{ url_for('pages.login') }}">로그인 화면 미리보기 →</a><a class="button secondary" href="{{ url_for('pages.register') }}">회원가입 화면 보기</a></div>
   <p><a class="text-link" href="{{ url_for('pages.home') }}">서비스 소개로 돌아가기</a></p>
-  <p class="prototype-note"><strong>화면 시연 안내</strong> 로그인·회원가입은 가상(mock) 미리보기입니다. 실제 계정 생성·로그인, 입력 내용 저장, 실제 차량별 기준 계산은 연결되지 않았습니다.</p>
+  <p class="prototype-note"><strong>화면 시연 안내</strong> {% if api_mode == 'live' %}계정에 로그인한 뒤 차량과 엔진오일 기록을 저장·조회할 수 있습니다. 실제 제조사 관리기준은 미확정입니다.{% else %}로그인·회원가입은 가상(mock) 미리보기입니다. 실제 계정 생성·로그인, 입력 내용 저장, 실제 차량별 기준 계산은 연결되지 않았습니다.{% endif %}</p>
 </div>
 {% endblock %}
