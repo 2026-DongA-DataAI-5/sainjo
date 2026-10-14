@@ -96,6 +96,7 @@ VEHICLE_FIELD_KEYS = {
     "transmission",
     "mileage",
     "reference_date",
+    "in_service_date",
     "conditions",
 }
 VALID_VEHICLE = {
@@ -108,6 +109,7 @@ VALID_VEHICLE = {
     "transmission": "자동",
     "mileage": 0,
     "reference_date": "2026-10-01",
+    "in_service_date": None,
     "conditions": "normal",
 }
 
@@ -365,6 +367,7 @@ class FakeVehicles:
             raise pymysql.err.IntegrityError(1062, "Duplicate entry for key 'uq_vehicles_owner'")
         row = {key: values[key] for key in VEHICLE_FIELD_KEYS - {"id"}}
         row["reference_date"] = date.fromisoformat(values["reference_date"]) if values["reference_date"] else None
+        row["in_service_date"] = date.fromisoformat(values["in_service_date"]) if values["in_service_date"] else None
         row.update({"id": self.next_id, "owner_id": owner_id})
         self.next_id += 1
         self.rows.append(row)
@@ -388,6 +391,9 @@ class FakeVehicles:
                 row.update(values)
                 row["reference_date"] = (
                     date.fromisoformat(values["reference_date"]) if values["reference_date"] else None
+                )
+                row["in_service_date"] = (
+                    date.fromisoformat(values["in_service_date"]) if values["in_service_date"] else None
                 )
                 return 1
         return 0

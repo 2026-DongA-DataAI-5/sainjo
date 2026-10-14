@@ -122,6 +122,8 @@ def _finish(
         question = "마지막 교환 기록의 날짜와 주행거리를 확인해 주실 수 있나요?"
     elif "vehicle.mileage" in item["missing_fields"] or "vehicle.reference_date" in item["missing_fields"]:
         question = "현재 주행거리와 측정일을 확인해 주실 수 있나요?"
+    elif "vehicle.in_service_date" in item["missing_fields"]:
+        question = "차량등록증에서 최초 등록일을 확인해 주실 수 있나요? 중고차 구매일은 사용하지 않습니다."
     elif item["history_status"] == "unknown":
         question = f"{item_name}의 이전 {work_name} 기록과 실제 운행조건을 확인해 주실 수 있나요?"
     else:
@@ -403,21 +405,35 @@ def evaluate_management(
             first_due = rule["first_interval_km"]
             current_mileage = vehicle.get("mileage")
             current_is_fresh = _parse_iso_date(vehicle.get("reference_date")) == parsed_as_of
-            if _valid_mileage(current_mileage) and current_is_fresh:
+            mileage_axis_known = _valid_mileage(current_mileage) and current_is_fresh
+            if mileage_axis_known:
                 item["next_mileage"] = first_due
-                state = "due" if current_mileage >= first_due else "upcoming"
-                first_months = rule.get("first_interval_months")
-                has_unknown_time_axis = (
-                    isinstance(first_months, int)
-                    and not isinstance(first_months, bool)
-                    and first_months > 0
-                    and _parse_iso_date(vehicle.get("in_service_date")) is None
-                )
+            first_months = rule.get("first_interval_months")
+            service_date = _parse_iso_date(vehicle.get("in_service_date"))
+            date_axis_required = isinstance(first_months, int) and not isinstance(first_months, bool) and first_months > 0
+            date_axis_known = date_axis_required and service_date is not None
+            if date_axis_known:
+                try:
+                    item["next_date"] = _add_months(service_date, first_months).isoformat()
+                except (OverflowError, ValueError):
+                    date_axis_known = False
+                    item["next_date"] = None
+            if mileage_axis_known or date_axis_known:
+                mileage_due = mileage_axis_known and current_mileage >= first_due
+                date_due = date_axis_known and _parse_iso_date(item["next_date"]) <= parsed_as_of
+                due = mileage_due or date_due
+                complete = mileage_axis_known and (not date_axis_required or date_axis_known)
+                state = "due" if due else ("upcoming" if complete else "partial")
+                missing_fields = ["records"]
+                if date_axis_required and not date_axis_known:
+                    missing_fields.append("vehicle.in_service_date")
+                if not mileage_axis_known:
+                    missing_fields.extend(["vehicle.mileage", "vehicle.reference_date"])
                 return _finish(
                     item,
-                    timing_status=state if state == "due" else ("partial" if has_unknown_time_axis else state),
-                    reasons=["기준의 첫 주행거리 시점을 표시했습니다. 이전 작업 이력을 확인하세요."],
-                    missing_fields=["records"] + (["vehicle.in_service_date"] if has_unknown_time_axis else []),
+                    timing_status=state,
+                    reasons=["기준의 첫 점검 시점을 표시했습니다. 이전 점검 이력을 확인하세요."],
+                    missing_fields=missing_fields,
                 )
         if not schedule_records:
             verb = "점검" if action == "inspection" else "교환"

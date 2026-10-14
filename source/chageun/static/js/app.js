@@ -21,6 +21,7 @@
     transmission: '변속기',
     mileage: '주행거리',
     reference_date: '주행거리 측정 기준일',
+    in_service_date: '최초 등록일',
     conditions: '운행조건',
     kind: '기록 종류',
     item_key: '관리항목',
@@ -32,7 +33,6 @@
     checked_date: '자료 확인일',
     rights_status: '기준 이용 상태',
     review_status: '기준 검토 상태',
-    in_service_date: '차량 최초 사용일',
   };
   const WORK_TYPE_LABELS = { inspection: '점검', replacement: '교환', unknown: '작업 유형 미확인' };
   const KIND_LABELS = { previous_history: '이전 이력 입력', maintenance_result: '정비 결과 입력' };
@@ -151,12 +151,13 @@
       transmission: api.convert.text(value('transmission')),
       mileage: api.convert.int(value('mileage')),
       reference_date: api.convert.date(value('reference_date')),
+      in_service_date: api.convert.date(value('in_service_date')),
       conditions: form.querySelector('input[name="conditions"]:checked')?.value || 'unknown',
     };
   }
 
   function fillVehicleForm(form, vehicle) {
-    for (const name of ['manufacturer', 'model', 'generation', 'year', 'engine', 'fuel', 'transmission', 'mileage', 'reference_date']) {
+    for (const name of ['manufacturer', 'model', 'generation', 'year', 'engine', 'fuel', 'transmission', 'mileage', 'reference_date', 'in_service_date']) {
       const field = form.elements.namedItem(name);
       const raw = vehicle[name];
       if (name === 'generation') field.value = raw || 'unknown';

@@ -35,7 +35,7 @@ VEHICLE_TEXT_LIMITS = {"manufacturer": 40, "model": 40, "engine": 60, "fuel": 30
 VEHICLE_REQUIRED_TEXT = {"manufacturer", "model"}
 VEHICLE_GENERATIONS = {"DL3", "JF"}
 VEHICLE_CONDITIONS = {"normal", "severe", "unknown"}
-VEHICLE_FIELDS = set(VEHICLE_TEXT_LIMITS) | {"generation", "year", "mileage", "reference_date", "conditions"}
+VEHICLE_FIELDS = set(VEHICLE_TEXT_LIMITS) | {"generation", "year", "mileage", "reference_date", "in_service_date", "conditions"}
 VEHICLE_YEAR_MIN = 1900
 VEHICLE_YEAR_MAX = 2035
 VEHICLE_MILEAGE_MAX = 1000000
@@ -281,6 +281,19 @@ def _vehicle_values(body):
     else:
         reject("reference_date", "YYYY-MM-DD 형식의 날짜를 입력해 주세요. 모르면 null을 보내 주세요.")
 
+    in_service_date = body.get("in_service_date")
+    if in_service_date is None:
+        values["in_service_date"] = None
+    elif isinstance(in_service_date, str) and DATE_PATTERN.fullmatch(in_service_date):
+        try:
+            if date.fromisoformat(in_service_date) > _today_korea():
+                raise ValueError
+            values["in_service_date"] = in_service_date
+        except ValueError:
+            reject("in_service_date", "한국 기준 오늘 이하의 실제 최초 등록일(YYYY-MM-DD)을 입력해 주세요.")
+    else:
+        reject("in_service_date", "차량등록증의 최초 등록일(YYYY-MM-DD)을 입력해 주세요. 모르면 null로 보내 주세요.")
+
     conditions = body.get("conditions", "unknown")
     if isinstance(conditions, str) and conditions in VEHICLE_CONDITIONS:
         values["conditions"] = conditions
@@ -292,6 +305,7 @@ def _vehicle_values(body):
 
 def _vehicle_out(row):
     reference_date = row["reference_date"]
+    in_service_date = row["in_service_date"]
     return {
         "id": row["id"],
         "manufacturer": row["manufacturer"],
@@ -303,6 +317,7 @@ def _vehicle_out(row):
         "transmission": row["transmission"],
         "mileage": row["mileage"],
         "reference_date": reference_date.isoformat() if reference_date is not None else None,
+        "in_service_date": in_service_date.isoformat() if in_service_date is not None else None,
         "conditions": row["conditions"],
     }
 

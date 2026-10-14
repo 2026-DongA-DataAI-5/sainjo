@@ -12,8 +12,8 @@ def create_vehicle(owner_id, values):
             """
             INSERT INTO vehicles
                 (owner_id, manufacturer, model, generation, year, engine,
-                 fuel, transmission, mileage, reference_date, conditions)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 fuel, transmission, mileage, reference_date, in_service_date, conditions)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 owner_id,
@@ -26,6 +26,7 @@ def create_vehicle(owner_id, values):
                 values["transmission"],
                 values["mileage"],
                 values["reference_date"],
+                values["in_service_date"],
                 values["conditions"],
             ),
         )
@@ -36,7 +37,7 @@ def find_vehicle_by_owner(owner_id):
     with get_db().cursor() as cursor:
         cursor.execute(
             "SELECT id, manufacturer, model, generation, year, engine, fuel, transmission, "
-            "mileage, reference_date, conditions FROM vehicles WHERE owner_id = %s",
+            "mileage, reference_date, in_service_date, conditions FROM vehicles WHERE owner_id = %s",
             (owner_id,),
         )
         return cursor.fetchone()
@@ -47,7 +48,7 @@ def find_vehicle_by_id_and_owner(vehicle_id, owner_id):
     with get_db().cursor() as cursor:
         cursor.execute(
             "SELECT id, manufacturer, model, generation, year, engine, fuel, transmission, "
-            "mileage, reference_date, conditions FROM vehicles WHERE id = %s AND owner_id = %s",
+            "mileage, reference_date, in_service_date, conditions FROM vehicles WHERE id = %s AND owner_id = %s",
             (vehicle_id, owner_id),
         )
         return cursor.fetchone()
@@ -57,12 +58,12 @@ def update_vehicle_by_id_and_owner(vehicle_id, owner_id, values):
     with get_db().cursor() as cursor:
         cursor.execute(
             "UPDATE vehicles SET manufacturer = %s, model = %s, generation = %s, year = %s, "
-            "engine = %s, fuel = %s, transmission = %s, mileage = %s, reference_date = %s, conditions = %s "
+            "engine = %s, fuel = %s, transmission = %s, mileage = %s, reference_date = %s, in_service_date = %s, conditions = %s "
             "WHERE id = %s AND owner_id = %s",
             (
                 values["manufacturer"], values["model"], values["generation"], values["year"],
                 values["engine"], values["fuel"], values["transmission"], values["mileage"],
-                values["reference_date"], values["conditions"], vehicle_id, owner_id,
+                values["reference_date"], values["in_service_date"], values["conditions"], vehicle_id, owner_id,
             ),
         )
         return cursor.rowcount
