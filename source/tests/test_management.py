@@ -208,6 +208,20 @@ class ManagementEngineTests(unittest.TestCase):
         self.assertIn("records", result["missing_fields"])
         self.assertEqual(result["action"], "inspection")
 
+    def test_every_unapproved_kia_candidate_stays_non_calculating(self):
+        rules = json.loads(RULES_PATH.read_text(encoding="utf-8"))["rules"]
+        candidates = [rule for rule in rules if rule.get("is_fixture") is False]
+        self.assertTrue(candidates)
+
+        for rule in candidates:
+            with self.subTest(rule_id=rule["rule_id"]):
+                result = self.evaluate(records=[], rule=rule)
+                self.assertEqual(result["timing_status"], "unknown")
+                self.assertIsNone(result["next_mileage"])
+                self.assertIsNone(result["next_date"])
+                self.assertIn("rule.rights_status", result["missing_fields"])
+                self.assertIn("rule.review_status", result["missing_fields"])
+
     def test_unknown_work_type_is_not_a_known_history(self):
         record = copy.deepcopy(self.case["input"]["records"][0])
         record["work_type"] = "unknown"
