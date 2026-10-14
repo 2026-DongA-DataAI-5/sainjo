@@ -30,10 +30,13 @@
     result: '기록 내용',
     source: '출처',
     checked_date: '자료 확인일',
+    rights_status: '기준 이용 상태',
+    review_status: '기준 검토 상태',
+    in_service_date: '차량 최초 사용일',
   };
   const WORK_TYPE_LABELS = { inspection: '점검', replacement: '교환', unknown: '작업 유형 미확인' };
   const KIND_LABELS = { previous_history: '이전 이력 입력', maintenance_result: '정비 결과 입력' };
-  const ITEM_LABELS = { 'engine-oil': '엔진 오일·오일필터', 'air-filter': '엔진 에어클리너 필터', coolant: '냉각수' };
+  const ITEM_LABELS = { 'engine-oil': '엔진 오일·오일필터', 'air-filter': '엔진 에어클리너 필터', coolant: '냉각수', 'spark-plugs': '점화플러그', 'drive-belt': '구동벨트' };
 
   function appPath(path) {
     return `${APP_BASE_PATH}${path.startsWith('/') ? path : `/${path}`}`;
@@ -573,7 +576,7 @@
       const body = await api.management.get(vehicle.id);
       showMessage(note, body.meta.calculation_mode === 'test_fixture'
         ? '가상 시험 기준으로 계산한 결과입니다. 실제 제조사 권장 주기가 아닙니다.'
-        : '실제 제조사 관리기준이 미확정입니다. 입력 이력은 확인할 수 있지만 교환 시점은 확정하지 않습니다.');
+            : '각 관리 기준의 상태를 확인해 안내합니다. 기준이 확정되지 않은 항목은 시점 계산을 보류합니다.');
       if (content) content.replaceChildren();
       for (const item of body.data.items) {
         if (content) {

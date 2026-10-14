@@ -18,24 +18,25 @@ _APPLICABILITY_FIELDS = (
 )
 
 
-def candidate_rule_for(vehicle: dict[str, Any]) -> dict[str, Any] | None:
-    """Return a candidate for an exact vehicle/condition match, never approve it.
+def candidate_rules_for(vehicle: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return exact vehicle/condition candidates, without approving them.
 
     ``evaluate_management`` is still responsible for enforcing rights and review
     gates. A missing, incomplete, or unmatched specification produces no rule.
     """
     if not isinstance(vehicle, dict):
-        return None
+        return []
 
     try:
         registry = json.loads(_REGISTRY_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return None
+        return []
 
     rules = registry.get("rules") if isinstance(registry, dict) else None
     if not isinstance(rules, list):
-        return None
+        return []
 
+    matches: list[dict[str, Any]] = []
     for rule in rules:
         if not isinstance(rule, dict):
             continue
@@ -51,8 +52,14 @@ def candidate_rule_for(vehicle: dict[str, Any]) -> dict[str, Any] | None:
             for field in _APPLICABILITY_FIELDS
         ):
             continue
-        if vehicle.get("conditions") != rule.get("conditions"):
+        if rule.get("conditions") not in ("any", vehicle.get("conditions")):
             continue
-        return rule
+        matches.append(rule)
 
-    return None
+    return matches
+
+
+def candidate_rule_for(vehicle: dict[str, Any]) -> dict[str, Any] | None:
+    """Compatibility helper returning the first candidate, if any."""
+    matches = candidate_rules_for(vehicle)
+    return matches[0] if matches else None

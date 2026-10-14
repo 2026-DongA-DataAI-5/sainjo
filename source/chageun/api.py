@@ -18,7 +18,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from .repositories import records, users, vehicles
 from .repositories.db import get_db
 from .services.management import evaluate_management
-from .services.rule_registry import candidate_rule_for
+from .services.rule_registry import candidate_rules_for
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -400,7 +400,7 @@ def update_vehicle(vehicle_id):
 
 RECORD_ENUMS = {
     "kind": {"previous_history", "maintenance_result"},
-    "item_key": {"engine-oil"},
+    "item_key": {"engine-oil", "spark-plugs", "drive-belt"},
     "work_type": {"inspection", "replacement", "unknown"},
 }
 RECORD_TEXT_LIMITS = {"result": 2000, "source": 100}
@@ -559,16 +559,19 @@ def get_management(vehicle_id):
     vehicle = vehicles.find_vehicle_by_id_and_owner(vehicle_id, session["user_id"])
     if vehicle is None:
         return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
-    rule = candidate_rule_for(_vehicle_out(vehicle))
+    rules = candidate_rules_for(_vehicle_out(vehicle))
+    if not rules:
+        rules = [None]
     calculation_mode = "unavailable"
     if current_app.config.get("CHAGEUN_ALLOW_TEST_FIXTURE"):
         # 개발자가 명시적으로 허용한 가상 시험 기준만 사용합니다. 실제 제조사 기준이 아닙니다.
         rule = json.loads((Path(__file__).parent / "services/test_rule.json").read_text(encoding="utf-8"))
+        rules = [rule]
         calculation_mode = "test_fixture"
     as_of_date = current_app.config.get("CHAGEUN_MANAGEMENT_AS_OF_DATE") or _today_korea().isoformat()
     items = [_record_out(row) for row in records.list_records_for_management(vehicle_id)]
-    item = evaluate_management(_vehicle_out(vehicle), items, rule, as_of_date)
-    return ok({"vehicle_id": vehicle_id, "items": [item]}, calculation_mode=calculation_mode)
+    evaluated = [evaluate_management(_vehicle_out(vehicle), items, rule, as_of_date) for rule in rules]
+    return ok({"vehicle_id": vehicle_id, "items": evaluated}, calculation_mode=calculation_mode)
 
 
 @api.errorhandler(Exception)

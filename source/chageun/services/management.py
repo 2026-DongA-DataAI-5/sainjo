@@ -59,6 +59,7 @@ def _add_months(value: date, months: int) -> date:
 
 def _empty_item(
     *,
+    item_key: str = ITEM_KEY,
     history_status: str = "unknown",
     timing_status: str = "unknown",
     labels: list[str] | None = None,
@@ -69,7 +70,7 @@ def _empty_item(
 ) -> dict[str, Any]:
     rule = rule or {}
     return {
-        "item_key": ITEM_KEY,
+        "item_key": item_key,
         "history_status": history_status,
         "timing_status": timing_status,
         "labels": labels or ([LABEL_UNKNOWN] if history_status == "unknown" else [LABEL_RECORDED]),
@@ -107,8 +108,14 @@ def _finish(
         labels.append(LABEL_UPCOMING)
     item["labels"] = labels
 
+    item_name = {
+        "engine-oil": "엔진 오일·오일필터",
+        "spark-plugs": "점화플러그",
+        "drive-belt": "구동벨트",
+    }.get(item.get("item_key"), "해당 항목")
+    work_name = "점검" if item.get("item_key") == "drive-belt" else "교환"
     if timing_status == "due":
-        question = "마지막 교환 기록과 운행조건을 함께 확인해 주실 수 있나요?"
+        question = f"마지막 {item_name} {work_name} 기록과 운행조건을 확인해 주실 수 있나요?"
     elif "vehicle.conditions" in item["missing_fields"]:
         question = "실제 운행조건을 확인해 주실 수 있나요?"
     elif "record.date" in item["missing_fields"] or "record.mileage" in item["missing_fields"]:
@@ -116,21 +123,21 @@ def _finish(
     elif "vehicle.mileage" in item["missing_fields"] or "vehicle.reference_date" in item["missing_fields"]:
         question = "현재 주행거리와 측정일을 확인해 주실 수 있나요?"
     elif item["history_status"] == "unknown":
-        question = "엔진 오일의 이전 교환 기록과 실제 운행조건을 확인해 주실 수 있나요?"
+        question = f"{item_name}의 이전 {work_name} 기록과 실제 운행조건을 확인해 주실 수 있나요?"
     else:
         question = "마지막 교환 기록과 운행조건을 함께 확인해 주실 수 있나요?"
     item["questions"] = [question]
     return item
 
 
-def _history_for_vehicle(vehicle: dict[str, Any], records: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _history_for_vehicle(vehicle: dict[str, Any], records: Any, item_key: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     if not isinstance(records, (list, tuple)):
         return [], []
 
     vehicle_id = vehicle.get("id")
     relevant: list[dict[str, Any]] = []
     for record in records:
-        if not isinstance(record, dict) or record.get("item_key") != ITEM_KEY:
+        if not isinstance(record, dict) or record.get("item_key") != item_key:
             continue
         record_vehicle_id = record.get("vehicle_id")
         if not _valid_vehicle_id(record_vehicle_id) or record_vehicle_id != vehicle_id:
@@ -258,7 +265,7 @@ def evaluate_management(
     rule: dict[str, Any] | None,
     as_of_date: str,
 ) -> dict[str, Any]:
-    """Evaluate the engine-oil replacement timing under a supplied rule.
+    """Evaluate one maintenance item's timing under a supplied rule.
 
     ``as_of_date`` is injected by the caller so the result is deterministic.
     The function treats user-entered records as unverified statements and never
@@ -266,6 +273,9 @@ def evaluate_management(
     """
     vehicle = vehicle if isinstance(vehicle, dict) else {}
     rule = rule if isinstance(rule, dict) else None
+    item_key = rule.get("item_key", ITEM_KEY) if rule else ITEM_KEY
+    if not isinstance(item_key, str) or not item_key:
+        item_key = ITEM_KEY
 
     vehicle_id = vehicle.get("id")
     if not _valid_vehicle_id(vehicle_id):
@@ -275,6 +285,7 @@ def evaluate_management(
             and rule.get("is_fixture") is True
         )
         item = _empty_item(
+            item_key=item_key,
             history_status="unknown",
             rule=rule,
             is_fixture=is_fixture,
@@ -286,12 +297,13 @@ def evaluate_management(
             missing_fields=["vehicle.id"],
         )
 
-    relevant_records, replacements = _history_for_vehicle(vehicle, records)
+    relevant_records, replacements = _history_for_vehicle(vehicle, records, item_key)
     history_status = "recorded" if relevant_records else "unknown"
 
     parsed_as_of = _parse_iso_date(as_of_date)
     if parsed_as_of is None:
         item = _empty_item(
+            item_key=item_key,
             history_status=history_status,
             rule=rule,
             is_fixture=bool(rule and rule.get("is_fixture") is True),
@@ -304,7 +316,7 @@ def evaluate_management(
         )
 
     if rule is None:
-        item = _empty_item(history_status=history_status)
+        item = _empty_item(item_key=item_key, history_status=history_status)
         return _finish(
             item,
             timing_status="unknown",
@@ -313,7 +325,7 @@ def evaluate_management(
         )
 
     is_fixture = rule.get("rights_status") == "test_fixture" and rule.get("is_fixture") is True
-    item = _empty_item(history_status=history_status, rule=rule, is_fixture=is_fixture)
+    item = _empty_item(item_key=item_key, history_status=history_status, rule=rule, is_fixture=is_fixture)
 
     # Only an explicitly reviewed real rule or a clearly marked test fixture is usable.
     fixture_rule = is_fixture and rule.get("review_status") == "reviewed"
@@ -330,11 +342,12 @@ def evaluate_management(
             missing_fields=["rule.rights_status", "rule.review_status"],
         )
 
-    if rule.get("item_key") != ITEM_KEY or rule.get("action") != "replacement":
+    action = rule.get("action")
+    if not isinstance(rule.get("item_key"), str) or action not in ("replacement", "inspection"):
         return _finish(
             item,
             timing_status="unsupported",
-            reasons=["현재 계산 범위는 엔진 오일 교환 한 항목입니다"],
+            reasons=["이 관리 항목의 계산 방식을 지원하지 않습니다"],
             missing_fields=[],
         )
 
@@ -356,14 +369,14 @@ def evaluate_management(
             reasons=["운행조건이 확인되지 않아 기준을 선택할 수 없습니다"],
             missing_fields=["vehicle.conditions"],
         )
-    if rule_conditions not in ("normal", "severe"):
+    if rule_conditions not in ("normal", "severe", "any"):
         return _finish(
             item,
             timing_status="unknown",
             reasons=["관리 기준의 운행조건이 확인되지 않았습니다"],
             missing_fields=["rule.conditions"],
         )
-    if vehicle_conditions != rule_conditions:
+    if rule_conditions != "any" and vehicle_conditions != rule_conditions:
         return _finish(
             item,
             timing_status="unsupported",
@@ -371,14 +384,44 @@ def evaluate_management(
             missing_fields=[],
         )
 
-    latest, history_reasons, history_missing = _latest_replacement(replacements)
+    if rule.get("condition_based") is True:
+        return _finish(
+            item,
+            timing_status="unknown",
+            reasons=["해당 운행조건은 부품 상태를 확인해 필요 시 점검합니다. 고정 교환주기는 안내하지 않습니다."],
+            missing_fields=[],
+        )
+
+    schedule_records = (
+        [record for record in relevant_records if record.get("work_type") == "inspection"]
+        if action == "inspection"
+        else replacements
+    )
+    latest, history_reasons, history_missing = _latest_replacement(schedule_records)
     if latest is None:
-        if not replacements:
-            reason = (
-                "확인된 교환 기록이 없어 다음 교환 시점을 계산할 수 없습니다"
-                if relevant_records
-                else "관리 이력이 없어 다음 교환 시점을 계산할 수 없습니다"
-            )
+        if not schedule_records and _valid_mileage(rule.get("first_interval_km")):
+            first_due = rule["first_interval_km"]
+            current_mileage = vehicle.get("mileage")
+            current_is_fresh = _parse_iso_date(vehicle.get("reference_date")) == parsed_as_of
+            if _valid_mileage(current_mileage) and current_is_fresh:
+                item["next_mileage"] = first_due
+                state = "due" if current_mileage >= first_due else "upcoming"
+                first_months = rule.get("first_interval_months")
+                has_unknown_time_axis = (
+                    isinstance(first_months, int)
+                    and not isinstance(first_months, bool)
+                    and first_months > 0
+                    and _parse_iso_date(vehicle.get("in_service_date")) is None
+                )
+                return _finish(
+                    item,
+                    timing_status=state if state == "due" else ("partial" if has_unknown_time_axis else state),
+                    reasons=["기준의 첫 주행거리 시점을 표시했습니다. 이전 작업 이력을 확인하세요."],
+                    missing_fields=["records"] + (["vehicle.in_service_date"] if has_unknown_time_axis else []),
+                )
+        if not schedule_records:
+            verb = "점검" if action == "inspection" else "교환"
+            reason = f"확인된 {verb} 기록이 없어 다음 관리 시점을 계산할 수 없습니다" if relevant_records else f"관리 이력이 없어 다음 {verb} 시점을 확인할 수 없습니다"
             missing_fields = ["record.work_type"]
             if not relevant_records:
                 missing_fields = ["records"]
@@ -452,7 +495,7 @@ def evaluate_management(
             computed_axes += 1
             if parsed_as_of >= next_date:
                 due = True
-    else:
+    elif rule.get("distance_only") is not True:
         required_axes += 1
         reasons.append("개월 주기가 확인되지 않아 기간 기준은 계산할 수 없습니다")
         missing_fields.append("rule.interval_months")

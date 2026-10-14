@@ -3,6 +3,7 @@ from flask import Blueprint, abort, current_app, jsonify, render_template, reque
 from .sample_data import DEMO_HISTORY, DEMO_ITEMS, DEMO_VEHICLE, STATUS_LABELS
 
 pages = Blueprint("pages", __name__)
+RECORD_ITEM_KEYS = {"engine-oil", "spark-plugs", "drive-belt"}
 
 
 @pages.app_context_processor
@@ -55,18 +56,18 @@ def vehicle():
 @pages.get("/history/new")
 def history_new():
     return render_template("record_form.html", title="이전 관리이력 입력", is_result=False,
-                           items=DEMO_ITEMS[:1] if _auth_api_mode() == "live" else DEMO_ITEMS)
+                           items=[item for item in DEMO_ITEMS if item["key"] in RECORD_ITEM_KEYS])
 
 
 @pages.get("/maintenance/new")
 def maintenance_new():
     return render_template("record_form.html", title="정비 결과 입력", is_result=True,
-                           items=DEMO_ITEMS[:1] if _auth_api_mode() == "live" else DEMO_ITEMS)
+                           items=[item for item in DEMO_ITEMS if item["key"] in RECORD_ITEM_KEYS])
 
 
 @pages.get("/items/<item_key>")
 def item_detail(item_key):
-    if _auth_api_mode() == "live" and item_key != "engine-oil":
+    if _auth_api_mode() == "live" and item_key not in {"engine-oil", "spark-plugs", "drive-belt"}:
         abort(404)
     item = next((entry for entry in DEMO_ITEMS if entry["key"] == item_key), None)
     if item is None:
