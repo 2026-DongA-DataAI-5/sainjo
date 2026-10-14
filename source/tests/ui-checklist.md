@@ -46,7 +46,7 @@
 
 이번 차량 주행거리 수정 화면 검수: 브라우저 14개 시나리오 통과, 320·390·768·1440px에서 가로 넘침 없음. 사용자 직접 검수는 별도이며, main 병합·운영 Flask/MySQL 배포·최신 소스 ZIP 재생성은 아직 완료로 표시하지 않습니다. 차량 기본정보 수정, OCR·외부 자동 조회, 실제 제조사 기준 계산은 범위 밖입니다.
 
-GitHub CI(커밋 53e5ec2): https://github.com/2026-DongA-DataAI-5/sainjo/actions/runs/38499727589 — Python/MySQL 시험과 13페이지 mock 빌드 통과.
+GitHub CI(커밋 930726c): https://github.com/2026-DongA-DataAI-5/sainjo/actions/runs/38500713791 — Python/MySQL 시험과 13페이지 mock 빌드 통과.
 
 ---
 
