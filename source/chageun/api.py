@@ -5,7 +5,7 @@
 
 import re
 import secrets
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 
 import pymysql
@@ -13,7 +13,7 @@ from flask import Blueprint, current_app, g, jsonify, request, session
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .repositories import users, vehicles
+from .repositories import records, users, vehicles
 from .repositories.db import get_db
 
 api = Blueprint("api", __name__, url_prefix="/api")
@@ -50,11 +50,12 @@ HTTP_ERROR_CODES = {
 }
 
 
-def ok(data, status=200):
+def ok(data, status=200, **meta):
     body = {
         "data": data,
         "meta": {"contract_version": CONTRACT_VERSION, "mode": "live", "calculation_mode": "none"},
     }
+    body["meta"].update(meta)
     return jsonify(body), status
 
 
@@ -356,6 +357,112 @@ def get_vehicle(vehicle_id):
     if row is None:
         return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
     return ok(_vehicle_out(row))
+
+
+RECORD_ENUMS = {
+    "kind": {"previous_history", "maintenance_result"},
+    "item_key": {"engine-oil"},
+    "work_type": {"inspection", "replacement", "unknown"},
+}
+RECORD_TEXT_LIMITS = {"result": 2000, "source": 100}
+RECORD_FIELDS = set(RECORD_ENUMS) | set(RECORD_TEXT_LIMITS) | {"date", "mileage", "checked_date"}
+
+
+def _today_korea():
+    return datetime.now(timezone(timedelta(hours=9))).date()
+
+
+def _record_values(body):
+    fields = {key: "허용되지 않은 필드입니다." for key in set(body) - RECORD_FIELDS}
+    values = {}
+    for key, allowed in RECORD_ENUMS.items():
+        value = body.get(key)
+        if not isinstance(value, str) or value not in allowed:
+            fields[key] = "허용된 항목을 선택해 주세요."
+        else:
+            values[key] = value
+    for key, limit in RECORD_TEXT_LIMITS.items():
+        value = body.get(key)
+        if value is None:
+            values[key] = None
+        elif isinstance(value, str) and value.strip() and len(value) <= limit:
+            values[key] = value
+        else:
+            fields[key] = f"1~{limit}자로 입력하거나 모르면 null을 보내 주세요."
+    mileage = body.get("mileage")
+    if mileage is None or (_is_int(mileage) and 0 <= mileage <= VEHICLE_MILEAGE_MAX):
+        values["mileage"] = mileage
+    else:
+        fields["mileage"] = "0~1,000,000의 정수 또는 null을 보내 주세요."
+    for key in ("date", "checked_date"):
+        value = body.get(key)
+        parsed = None
+        if value is not None:
+            try:
+                if not isinstance(value, str) or not DATE_PATTERN.fullmatch(value):
+                    raise ValueError
+                parsed = date.fromisoformat(value)
+                if parsed > _today_korea():
+                    raise ValueError
+            except ValueError:
+                fields[key] = "한국 기준 오늘 이하의 실제 날짜(YYYY-MM-DD) 또는 null을 보내 주세요."
+        values["record_date" if key == "date" else key] = parsed
+    return values, fields
+
+
+def _record_out(row):
+    data = {key: row[key] for key in ("id", "vehicle_id", "kind", "item_key", "work_type", "mileage", "result", "source")}
+    for source, target in (("record_date", "date"), ("checked_date", "checked_date")):
+        data[target] = row[source].isoformat() if row[source] is not None else None
+    data["created_at"] = row["created_at"].isoformat(timespec="microseconds") + "Z"
+    return data
+
+
+@api.get("/vehicles/<int:vehicle_id>/records")
+@login_required
+def list_records(vehicle_id):
+    if vehicles.find_vehicle_by_id_and_owner(vehicle_id, session["user_id"]) is None:
+        return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
+    try:
+        if set(request.args) - {"page", "page_size"} or any(len(request.args.getlist(key)) != 1 for key in request.args):
+            raise ValueError
+        raw_page, raw_size = request.args.get("page", "1"), request.args.get("page_size", "20")
+        if not re.fullmatch(r"[0-9]{1,9}", raw_page) or not re.fullmatch(r"[0-9]{1,3}", raw_size):
+            raise ValueError
+        page, page_size = int(raw_page), int(raw_size)
+        if page < 1 or not 1 <= page_size <= 100:
+            raise ValueError
+    except ValueError:
+        return fail("VALIDATION_ERROR", "page는 양의 정수, page_size는 1~100으로 입력해 주세요.", 400)
+    rows = records.list_records_by_vehicle(vehicle_id, page, page_size)
+    return ok([_record_out(row) for row in rows], pagination={
+        "page": page, "page_size": page_size, "total": records.count_records(vehicle_id),
+    })
+
+
+@api.post("/vehicles/<int:vehicle_id>/records")
+@login_required
+@csrf_protected
+def add_record(vehicle_id):
+    if vehicles.find_vehicle_by_id_and_owner(vehicle_id, session["user_id"]) is None:
+        return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
+    body = _json_body()
+    if body is None:
+        return fail("VALIDATION_ERROR", "입력을 확인해 주세요", 400)
+    values, fields = _record_values(body)
+    if fields:
+        return fail("VALIDATION_ERROR", "입력을 확인해 주세요", 400, fields)
+    db = get_db()
+    try:
+        record_id = records.create_record(vehicle_id, values)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    row = records.find_record_by_id_and_vehicle(record_id, vehicle_id)
+    if row is None:
+        raise RuntimeError("저장한 기록을 다시 읽지 못했습니다.")
+    return ok(_record_out(row), 201)
 
 
 @api.errorhandler(Exception)

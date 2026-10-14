@@ -20,6 +20,7 @@ def get_db():
             autocommit=False,
             cursorclass=pymysql.cursors.DictCursor,
             connect_timeout=5,
+            init_command="SET time_zone = '+00:00'",
         )
     return g.db
 
