@@ -172,6 +172,31 @@ class ManagementEngineTests(unittest.TestCase):
         self.assertEqual(other_corner["component_position"], "front_right")
         self.assertEqual(same_corner["history_status"], "recorded")
 
+    def test_each_corner_uses_only_its_own_latest_inspection_for_next_mileage(self):
+        rule = self.candidate_rule("KIA_DL3_2021_G20_BRAKE_INSPECTION_CANDIDATE")
+        vehicle = copy.deepcopy(self.case["input"]["vehicle"])
+        vehicle.update(mileage=85_000, reference_date=self.case["input"]["as_of_date"])
+        template = copy.deepcopy(self.case["input"]["records"][0])
+        template.update(item_key="brake-pads-discs", work_type="inspection")
+        records = [
+            {**template, "id": 11, "component_position": "front_left", "mileage": 80_000},
+            {**template, "id": 12, "component_position": "front_right", "mileage": 70_000},
+        ]
+
+        left = evaluate_management(
+            vehicle, records, rule, self.case["input"]["as_of_date"],
+            component_position="front_left",
+        )
+        right = evaluate_management(
+            vehicle, records, rule, self.case["input"]["as_of_date"],
+            component_position="front_right",
+        )
+
+        self.assertEqual(left["next_mileage"], 90_000)
+        self.assertEqual(left["timing_status"], "partial")
+        self.assertEqual(right["next_mileage"], 80_000)
+        self.assertEqual(right["timing_status"], "due")
+
     def test_first_mileage_only_inspection_is_due_without_claiming_no_service(self):
         rule = self.candidate_rule("KIA_DL3_2021_G20_BRAKE_INSPECTION_CANDIDATE")
         vehicle = copy.deepcopy(self.case["input"]["vehicle"])
