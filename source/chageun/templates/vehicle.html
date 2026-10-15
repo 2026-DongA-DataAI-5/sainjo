@@ -1,9 +1,10 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="page-heading"><div><p class="eyebrow">차량과 적용 대상</p><h1>차량 정보를 확인해 주세요</h1><p class="lede">K5 JF와 DL3는 다른 세대입니다. 모르는 사양은 미확인으로 남기고, 이 정보만으로 관리 기준을 계산하지 않습니다.</p></div></div>
-<form class="form-panel preview-form" id="vehicle-form"><div class="section-heading"><h2>아는 정보만 입력</h2><span class="badge unknown" data-save-status>가상 저장(mock)</span></div><div class="form-grid">
-<div><label for="manufacturer">제조사</label><input id="manufacturer" name="manufacturer" maxlength="40" placeholder="예: 기아"></div>
-<div><label for="model">모델</label><input id="model" name="model" maxlength="40" placeholder="예: K5"></div>
+<p class="field-note">현재 관리 기준 검토 범위는 국내 판매 2021년형 기아 K5 DL3 · 2.0 가솔린 · G2.0 CVVL · 자동변속기입니다. 다른 사양도 차량과 이력은 등록할 수 있지만, 이 기준을 대신 적용하지 않습니다.</p>
+<form class="form-panel preview-form" id="vehicle-form"><div class="section-heading"><h2>아는 정보만 입력</h2><span class="badge unknown" data-save-status>{{ '서버 저장' if api_mode == 'live' else '가상 저장(mock)' }}</span></div><div class="form-grid">
+<div><label for="manufacturer">제조사</label><input id="manufacturer" name="manufacturer" maxlength="40" placeholder="예: 기아" {% if api_mode == 'live' %}required{% endif %}></div>
+<div><label for="model">모델</label><input id="model" name="model" maxlength="40" placeholder="예: K5" {% if api_mode == 'live' %}required{% endif %}></div>
 <div><label for="generation">세대·모델코드</label><select id="generation" name="generation"><option value="unknown">미확인</option><option value="DL3">DL3</option><option value="JF">JF</option></select></div>
 <div><label for="model-year">연식</label><input id="model-year" name="year" type="number" min="1900" max="2035" step="1" placeholder="예: 2021"></div>
 <div><label for="engine">엔진·파워트레인</label><input id="engine" name="engine" maxlength="60" placeholder="모르면 비워 두세요"></div>
@@ -11,5 +12,20 @@
 <div><label for="transmission">변속기</label><input id="transmission" name="transmission" maxlength="40" placeholder="모르면 비워 두세요"></div>
 <div><label for="mileage">현재 주행거리 km</label><input id="mileage" name="mileage" type="number" min="0" max="1000000" step="1" placeholder="예: 70000"></div>
 <div><label for="reference-date">주행거리 측정 기준일</label><input id="reference-date" name="reference_date" type="date"></div>
-</div><fieldset><legend>운행조건</legend><p class="muted">제조사 원문에 따른 실제 운행조건 판정은 아직 연결하지 않았습니다.</p><label class="choice"><input type="radio" name="conditions" value="unknown" checked>미확인</label></fieldset><p class="form-message" role="status" aria-live="polite"></p><div class="form-actions"><button class="button primary" type="submit">차량 정보 저장하고 대시보드 보기</button><a class="button secondary" href="{{ url_for('pages.dashboard') }}">대시보드 예시 보기</a></div><p class="muted">지금은 가상(mock) 응답으로 저장합니다. 서버 DB·로그인·실제 차량별 관리기준 계산은 아직 없습니다. 탭을 닫으면 mock 자료는 사라집니다.</p></form>
+<div><label for="in-service-date">최초 운행·출고일</label><input id="in-service-date" name="in_service_date" type="date"><small class="muted">정확한 출고일을 모르면 차량등록증의 최초 등록일을 대체 기준으로 입력하세요. 등록일은 실제 출고일과 다를 수 있습니다. 중고차 구매일이나 연식은 대신 입력하지 말고, 모르면 비워 두세요.</small></div>
+</div><fieldset><legend>운행조건</legend><p class="muted">실제 운행조건은 사용자가 확인해 선택합니다. 가혹조건이면 기아 설명서의 해당 항목을 모두 골라야 품목별 안내를 좁힐 수 있습니다.</p><label class="choice"><input type="radio" name="conditions" value="unknown" checked>미확인</label><label class="choice"><input type="radio" name="conditions" value="normal">일반조건 · 사용자 확인</label><label class="choice"><input type="radio" name="conditions" value="severe">가혹조건 · 사용자 확인</label></fieldset>
+<fieldset data-severe-conditions hidden><legend>해당하는 가혹 운행상황</legend><p class="muted">기아 2021년형 K5 설명서 번호입니다. 해당하는 항목을 모두 선택하세요. 품목마다 적용 번호가 다르며, 비워 두면 항목별 가혹조건 기준을 적용하지 않습니다.</p><div class="condition-check-grid">
+<label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="1">1. 짧은 거리를 반복 주행</label>
+<label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="2">2. 모래·먼지가 많은 지역 주행</label>
+<label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="3">3. 과다한 공회전 사용</label>
+<label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="4">4. 교통 체증이 심한 구역 주행</label>
+<label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="5">5. 험로를 자주 주행</label>
+<label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="6">6. 산길·오르막길·내리막길 주행</label>
+<label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="7">7. 택시·상용·견인차 등으로 사용</label>
+<label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="8">8. 잦은 고속 주행·급가감속</label>
+<label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="9">9. 정지와 출발을 자주 반복</label>
+<label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="10">10. 염분·부식물질 또는 한랭지역 주행</label>
+<label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="11">11. 견인·캠핑·지붕 짐칸 사용</label>
+<label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="12">12. 권장하지 않은 엔진오일 사용</label>
+</div></fieldset><p class="form-message" role="status" aria-live="polite"></p><div class="form-actions"><button class="button primary" type="submit">차량 정보 저장하고 대시보드 보기</button><a class="button secondary" href="{{ url_for('pages.dashboard') }}">대시보드 보기</a></div><p class="muted">{% if api_mode == 'live' %}계정당 차량 1대를 등록합니다. 선택한 운행상황도 계정 차량 정보로 저장됩니다. 등록 후 수정할 수 있습니다.{% else %}가상(mock) 응답으로 저장합니다. 서버 DB에는 보내지 않으며 탭을 닫으면 mock 자료는 사라집니다.{% endif %}</p></form>
 {% endblock %}

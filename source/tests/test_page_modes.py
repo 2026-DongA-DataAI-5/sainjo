@@ -1,0 +1,70 @@
+"""서버 화면에서 샘플·mock 자료가 실제 계정 자료로 표시되지 않게 검증합니다."""
+
+import unittest
+from chageun import create_app
+from chageun.sample_data import DEMO_ITEMS
+from scripts.build_pages import page_routes
+
+
+class PageModeTests(unittest.TestCase):
+    def test_static_builder_includes_every_demo_item_detail(self):
+        routes = page_routes(item["key"] for item in DEMO_ITEMS)
+        self.assertEqual(len(routes), len(set(routes)))
+        for item in DEMO_ITEMS:
+            with self.subTest(item_key=item["key"]):
+                self.assertIn(f"/items/{item['key']}", routes)
+
+    def test_live_pages_use_live_mode_and_do_not_show_sample_timelines(self):
+        client = create_app({"TESTING": True, "CHAGEUN_SERVER_MODE": True, "SECRET_KEY": "page-test-only"}).test_client()
+        for path in ("/vehicle", "/history/new", "/maintenance/new", "/timeline", "/dashboard", "/items/engine-oil", "/items/air-filter", "/items/spark-plugs", "/questions"):
+            with self.subTest(path=path):
+                response = client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.headers.get("Cache-Control"), "no-store")
+                text = response.get_data(as_text=True)
+                self.assertTrue('data-api-mode="live"' in text, path)
+                self.assertFalse("가상 저장(mock)" in text, path)
+                self.assertFalse("75,000km" in text, path)
+                self.assertFalse("화면 예시 · 날짜가 있는 기록" in text, path)
+        dashboard = client.get("/dashboard").get_data(as_text=True)
+        self.assertIn('data-management-controls hidden', dashboard)
+        self.assertIn('data-management-content', dashboard)
+        form = client.get("/maintenance/new").get_data(as_text=True)
+        self.assertIn('value="unknown"', form)
+        self.assertIn('value="coolant"', form)
+        self.assertIn('value="air-filter"', form)
+        self.assertIn('value="brake-fluid"', form)
+        self.assertIn('value="cabin-air-filter"', form)
+        self.assertIn('value="spark-plugs"', form)
+        vehicle_form = client.get("/vehicle").get_data(as_text=True)
+        self.assertIn("국내 판매 2021년형 기아 K5 DL3", vehicle_form)
+        self.assertIn("다른 사양도 차량과 이력은 등록할 수 있지만", vehicle_form)
+        self.assertIn("js/vehicle-scope.js", vehicle_form)
+        detail = client.get("/items/engine-oil").get_data(as_text=True)
+        self.assertIn('data-management-item="engine-oil"', detail)
+        for item_key in ("air-filter", "brake-fluid", "cabin-air-filter", "coolant"):
+            with self.subTest(item_key=item_key):
+                self.assertEqual(client.get(f"/items/{item_key}").status_code, 200)
+        self.assertIn('data-severe-conditions', vehicle_form)
+        self.assertIn('name="severe_condition_codes"', vehicle_form)
+        spark_plugs = client.get("/items/spark-plugs").get_data(as_text=True)
+        self.assertIn('data-management-item="spark-plugs"', spark_plugs)
+
+    def test_mock_spark_plug_example_shows_candidate_schedule_and_pending_rights(self):
+        client = create_app({"TESTING": True}).test_client()
+        detail = client.get("/items/spark-plugs").get_data(as_text=True)
+        self.assertIn("165,000km", detail)
+        self.assertIn("사용 권리 확인 중", detail)
+        self.assertIn("가상", detail)
+
+    def test_mock_pages_and_assets_still_render(self):
+        client = create_app({"TESTING": True}).test_client()
+        for path in ("/", "/login", "/register", "/dashboard", "/vehicle", "/maintenance/new", "/timeline",
+                     "/static/css/app.css", "/static/js/navigation.js"):
+            with self.subTest(path=path):
+                with client.get(path) as response:
+                    self.assertEqual(response.status_code, 200)
+        self.assertIn('data-api-mode="mock"', client.get("/vehicle").get_data(as_text=True))
+        dashboard = client.get("/dashboard").get_data(as_text=True)
+        self.assertIn('data-management-controls ', dashboard)
+        self.assertNotIn('data-management-controls hidden', dashboard)

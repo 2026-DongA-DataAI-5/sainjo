@@ -28,8 +28,6 @@ jobs:
           python-version: "3.12"
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
-      - name: Extract project source
-        run: python -c "import zipfile; zipfile.ZipFile('sainjo-source.zip').extractall('source')"
       - name: Install application dependencies
         run: python -m pip install -r source/requirements.txt
       - name: Build static site

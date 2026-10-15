@@ -10,6 +10,7 @@ from pathlib import Path
 
 TESTS_DIR = Path(__file__).parent
 FIXTURE_PATH = TESTS_DIR / "fixtures" / "management.json"
+RULES_PATH = TESTS_DIR.parent / "chageun" / "services" / "candidate_rules.json"
 MODULE_PATH = TESTS_DIR.parent / "chageun" / "services" / "management.py"
 MODULE_SPEC = importlib.util.spec_from_file_location("management_under_test", MODULE_PATH)
 if MODULE_SPEC is None or MODULE_SPEC.loader is None:
@@ -43,18 +44,28 @@ class ManagementEngineTests(unittest.TestCase):
             {
                 "item_key", "history_status", "timing_status", "labels", "next_mileage",
                 "next_date", "reasons", "missing_fields", "rule_id", "source",
-                "checked_date", "questions", "is_fixture",
+                "source_url", "checked_date", "questions", "is_fixture", "action",
+                "rights_status", "rights_status_label", "rights_review_pending",
+                "condition_based", "matched_severe_condition_codes", "component_position", "interval_km", "interval_months",
+                "first_interval_km", "first_interval_months",
             },
         )
         for field in ("item_key", "history_status", "timing_status"):
             self.assertIsInstance(result[field], str)
-        for field in ("labels", "reasons", "missing_fields", "questions"):
+        for field in ("labels", "reasons", "missing_fields", "questions", "matched_severe_condition_codes"):
             self.assertIsInstance(result[field], list)
         for field in ("rule_id", "source", "checked_date"):
             self.assertTrue(result[field] is None or isinstance(result[field], str))
         self.assertTrue(result["next_mileage"] is None or type(result["next_mileage"]) is int)
         self.assertTrue(result["next_date"] is None or isinstance(result["next_date"], str))
         self.assertIsInstance(result["is_fixture"], bool)
+
+    def candidate_rule(self, rule_id):
+        rules = json.loads(RULES_PATH.read_text(encoding="utf-8"))["rules"]
+        rule = copy.deepcopy(next(rule for rule in rules if rule["rule_id"] == rule_id))
+        # Directly exercise interval arithmetic with an explicitly approved copy.
+        rule.update(rights_status="allowed", review_status="reviewed")
+        return rule
 
     def test_fixed_contract_fixture(self):
         result = self.evaluate()
@@ -136,6 +147,87 @@ class ManagementEngineTests(unittest.TestCase):
         self.assertEqual(inspection_result["history_status"], "recorded")
         self.assertEqual(inspection_result["timing_status"], "unknown")
         self.assertIsNone(inspection_result["next_date"])
+
+    def test_inspection_rules_expose_action_and_ask_about_inspection_history(self):
+        rule = self.candidate_rule("KIA_DL3_2021_G20_BRAKE_INSPECTION_CANDIDATE")
+        result = self.evaluate(records=[], rule=rule)
+        self.assertEqual(result["action"], "inspection")
+        self.assertIn("점검", result["questions"][0])
+        self.assertNotIn("교환", result["questions"][0])
+        self.assertEqual(result["source_url"], rule["source_url"])
+
+    def test_position_scoped_history_does_not_cross_to_the_other_corner(self):
+        rule = self.candidate_rule("KIA_DL3_2021_G20_BRAKE_INSPECTION_CANDIDATE")
+        record = copy.deepcopy(self.case["input"]["records"][0])
+        record.update(item_key="brake-pads-discs", work_type="inspection", component_position="front_left")
+
+        other_corner = evaluate_management(
+            copy.deepcopy(self.case["input"]["vehicle"]), [record], rule,
+            self.case["input"]["as_of_date"], component_position="front_right",
+        )
+        same_corner = evaluate_management(
+            copy.deepcopy(self.case["input"]["vehicle"]), [record], rule,
+            self.case["input"]["as_of_date"], component_position="front_left",
+        )
+        self.assertEqual(other_corner["history_status"], "unknown")
+        self.assertEqual(other_corner["component_position"], "front_right")
+        self.assertEqual(same_corner["history_status"], "recorded")
+
+    def test_each_corner_uses_only_its_own_latest_inspection_for_next_mileage(self):
+        rule = self.candidate_rule("KIA_DL3_2021_G20_BRAKE_INSPECTION_CANDIDATE")
+        vehicle = copy.deepcopy(self.case["input"]["vehicle"])
+        vehicle.update(mileage=85_000, reference_date=self.case["input"]["as_of_date"])
+        template = copy.deepcopy(self.case["input"]["records"][0])
+        template.update(item_key="brake-pads-discs", work_type="inspection")
+        records = [
+            {**template, "id": 11, "component_position": "front_left", "mileage": 80_000},
+            {**template, "id": 12, "component_position": "front_right", "mileage": 70_000},
+        ]
+
+        left = evaluate_management(
+            vehicle, records, rule, self.case["input"]["as_of_date"],
+            component_position="front_left",
+        )
+        right = evaluate_management(
+            vehicle, records, rule, self.case["input"]["as_of_date"],
+            component_position="front_right",
+        )
+
+        self.assertEqual(left["next_mileage"], 90_000)
+        self.assertEqual(left["timing_status"], "partial")
+        self.assertEqual(right["next_mileage"], 80_000)
+        self.assertEqual(right["timing_status"], "due")
+
+    def test_first_mileage_only_inspection_is_due_without_claiming_no_service(self):
+        rule = self.candidate_rule("KIA_DL3_2021_G20_BRAKE_INSPECTION_CANDIDATE")
+        vehicle = copy.deepcopy(self.case["input"]["vehicle"])
+        vehicle.update(mileage=90_000, reference_date=self.case["input"]["as_of_date"])
+        rule["first_interval_km"] = 10_000
+        result = evaluate_management(vehicle, [], rule, self.case["input"]["as_of_date"])
+        self.assertEqual(result["timing_status"], "due")
+        self.assertEqual(result["history_status"], "unknown")
+        self.assertIn("records", result["missing_fields"])
+        self.assertEqual(result["action"], "inspection")
+
+    def test_pending_rights_candidates_calculate_with_visible_status(self):
+        rules = json.loads(RULES_PATH.read_text(encoding="utf-8"))["rules"]
+        candidates = [rule for rule in rules if rule.get("is_fixture") is False]
+        self.assertTrue(candidates)
+
+        for rule in candidates:
+            with self.subTest(rule_id=rule["rule_id"]):
+                result = self.evaluate(records=[], rule=rule)
+                self.assertTrue(result["rights_review_pending"])
+                self.assertEqual(result["rights_status_label"], "사용 권리 확인 중")
+                self.assertNotIn("rule.rights_status", result["missing_fields"])
+                self.assertNotIn("rule.review_status", result["missing_fields"])
+
+    def test_unknown_rights_states_still_block_calculation(self):
+        rule = self.candidate_rule("KIA_DL3_2021_G20_OIL_NORMAL_CANDIDATE")
+        rule.update(rights_status="unknown", review_status="source_checked_pending_approval")
+        result = self.evaluate(records=[], rule=rule)
+        self.assertEqual(result["timing_status"], "unknown")
+        self.assertIn("rule.rights_status", result["missing_fields"])
 
     def test_unknown_work_type_is_not_a_known_history(self):
         record = copy.deepcopy(self.case["input"]["records"][0])
@@ -390,7 +482,10 @@ class ManagementEngineTests(unittest.TestCase):
                     {
                         "item_key", "history_status", "timing_status", "labels", "next_mileage",
                         "next_date", "reasons", "missing_fields", "rule_id", "source",
-                        "checked_date", "questions", "is_fixture",
+                        "source_url", "checked_date", "questions", "is_fixture", "action",
+                        "rights_status", "rights_status_label", "rights_review_pending",
+                        "condition_based", "matched_severe_condition_codes", "component_position", "interval_km", "interval_months",
+                        "first_interval_km", "first_interval_months",
                     },
                 )
 
@@ -485,7 +580,10 @@ class ManagementEngineTests(unittest.TestCase):
             {
                 "item_key", "history_status", "timing_status", "labels", "next_mileage",
                 "next_date", "reasons", "missing_fields", "rule_id", "source",
-                "checked_date", "questions", "is_fixture",
+                "source_url", "checked_date", "questions", "is_fixture", "action",
+                "rights_status", "rights_status_label", "rights_review_pending",
+                "condition_based", "matched_severe_condition_codes", "component_position", "interval_km", "interval_months",
+                "first_interval_km", "first_interval_months",
             },
         )
 

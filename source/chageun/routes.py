@@ -3,11 +3,13 @@ from flask import Blueprint, abort, current_app, jsonify, render_template, reque
 from .sample_data import DEMO_HISTORY, DEMO_ITEMS, DEMO_VEHICLE, STATUS_LABELS
 
 pages = Blueprint("pages", __name__)
+RECORD_ITEM_KEYS = {"engine-oil", "air-filter", "spark-plugs", "drive-belt", "brake-pads-discs", "ball-joint", "lower-arm", "lower-arm-ball-joint", "brake-fluid", "cabin-air-filter", "coolant"}
+RECORD_ENTRY_ITEM_KEYS = RECORD_ITEM_KEYS - {"lower-arm-ball-joint"}
 
 
 @pages.app_context_processor
 def common_context():
-    return {"vehicle": DEMO_VEHICLE, "status_labels": STATUS_LABELS}
+    return {"vehicle": DEMO_VEHICLE, "status_labels": STATUS_LABELS, "api_mode": _auth_api_mode()}
 
 
 @pages.get("/")
@@ -44,7 +46,7 @@ def start():
 
 @pages.get("/dashboard")
 def dashboard():
-    return render_template("dashboard.html", title="관리 대시보드", items=DEMO_ITEMS, api_mode=_auth_api_mode())
+    return render_template("dashboard.html", title="관리 대시보드", items=[] if _auth_api_mode() == "live" else DEMO_ITEMS)
 
 
 @pages.get("/vehicle")
@@ -54,20 +56,25 @@ def vehicle():
 
 @pages.get("/history/new")
 def history_new():
-    return render_template("record_form.html", title="이전 관리이력 입력", is_result=False, items=DEMO_ITEMS)
+    return render_template("record_form.html", title="이전 관리이력 입력", is_result=False,
+                           items=[item for item in DEMO_ITEMS if item["key"] in RECORD_ENTRY_ITEM_KEYS])
 
 
 @pages.get("/maintenance/new")
 def maintenance_new():
-    return render_template("record_form.html", title="정비 결과 입력", is_result=True, items=DEMO_ITEMS)
+    return render_template("record_form.html", title="정비 결과 입력", is_result=True,
+                           items=[item for item in DEMO_ITEMS if item["key"] in RECORD_ENTRY_ITEM_KEYS])
 
 
 @pages.get("/items/<item_key>")
 def item_detail(item_key):
+    if _auth_api_mode() == "live" and item_key not in RECORD_ITEM_KEYS:
+        abort(404)
     item = next((entry for entry in DEMO_ITEMS if entry["key"] == item_key), None)
     if item is None:
         abort(404)
-    return render_template("item_detail.html", title=item["name"], item=item)
+    return render_template("item_detail.html", title=item["name"], item=item,
+                           record_only=item_key == "lower-arm" and _auth_api_mode() == "live")
 
 
 @pages.get("/questions")
@@ -78,7 +85,7 @@ def questions():
 
 @pages.get("/timeline")
 def timeline():
-    return render_template("timeline.html", title="관리 타임라인", records=DEMO_HISTORY)
+    return render_template("timeline.html", title="관리 타임라인", records=[] if _auth_api_mode() == "live" else DEMO_HISTORY)
 
 
 @pages.get("/api/health")

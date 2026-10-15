@@ -161,12 +161,15 @@
     transmission: { type: 'string', max: 40 },
     mileage: { type: 'int', min: 0, max: 1000000 },
     reference_date: { type: 'date' },
+    in_service_date: { type: 'date' },
     conditions: { type: 'enum', values: ['normal', 'severe', 'unknown'], required: true, defaultValue: 'unknown' },
+    severe_condition_codes: { type: 'int_array', min: 1, max: 12, maxLength: 12, required: true, defaultValue: [] },
   };
 
   const RECORD_SCHEMA = {
     kind: { type: 'enum', values: ['previous_history', 'maintenance_result'], required: true },
-    item_key: { type: 'enum', values: ['engine-oil'], required: true },
+    item_key: { type: 'enum', values: ['engine-oil', 'air-filter', 'spark-plugs', 'drive-belt', 'brake-pads-discs', 'ball-joint', 'lower-arm', 'lower-arm-ball-joint', 'brake-fluid', 'cabin-air-filter', 'coolant'], required: true },
+    component_position: { type: 'enum', values: ['unknown', 'front', 'rear', 'left', 'right', 'front_left', 'front_right', 'rear_left', 'rear_right'], required: true, defaultValue: 'unknown' },
     work_type: { type: 'enum', values: ['inspection', 'replacement', 'unknown'], required: true },
     date: { type: 'date' },
     mileage: { type: 'int', min: 0, max: 1000000 },
@@ -188,6 +191,11 @@
       if (value > todayKst()) return '오늘 이후 날짜는 입력할 수 없습니다.';
     } else if (rule.type === 'enum') {
       if (!rule.values.includes(value)) return '선택할 수 없는 값입니다.';
+    } else if (rule.type === 'int_array') {
+      if (!Array.isArray(value)) return '목록으로 선택해 주세요.';
+      if (value.length > rule.maxLength) return `${rule.maxLength}개 이하로 선택해 주세요.`;
+      if (value.some((item) => !Number.isInteger(item) || item < rule.min || item > rule.max)) return `${rule.min}~${rule.max} 사이의 번호만 선택해 주세요.`;
+      if (new Set(value).size !== value.length) return '같은 번호를 중복 선택할 수 없습니다.';
     }
     return null;
   }
@@ -215,6 +223,15 @@
       const problem = checkField(rule, body[key]);
       if (problem) fields[key] = problem;
       else value[key] = body[key];
+    }
+    if (
+      schema === VEHICLE_SCHEMA
+      && value.conditions !== undefined
+      && value.severe_condition_codes !== undefined
+      && value.conditions !== 'severe'
+      && value.severe_condition_codes.length > 0
+    ) {
+      fields.severe_condition_codes = '가혹조건을 선택했을 때만 세부 항목을 선택할 수 있습니다.';
     }
     if (Object.keys(fields).length) throw mockError(400, 'VALIDATION_ERROR', undefined, fields);
     return value;
@@ -362,6 +379,9 @@
       if (method === 'GET') return envelope({ ...vehicle });
       if (method === 'PATCH') {
         Object.assign(vehicle, validate(VEHICLE_SCHEMA, payload, { partial: true }));
+        if (payload.conditions !== undefined && payload.conditions !== 'severe' && payload.severe_condition_codes === undefined) {
+          vehicle.severe_condition_codes = [];
+        }
         saveStore(store);
         return envelope({ ...vehicle });
       }

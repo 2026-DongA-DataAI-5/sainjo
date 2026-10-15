@@ -1,11 +1,13 @@
-"""차근 API v1.0 - 1단계: 최소 인증(가입·로그인·로그아웃·내 정보).
+"""차근 API v1.0: 인증, 계정별 차량·관리기록, 차량별 관리 안내.
 
 규약: docs 'API 주소·인증·오류·목록' 절. 응답 data는 snake_case, 비밀번호·해시·내부 DB 값은 응답하지 않습니다.
 """
 
 import re
 import secrets
-from datetime import date
+import json
+from pathlib import Path
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 
 import pymysql
@@ -13,8 +15,10 @@ from flask import Blueprint, current_app, g, jsonify, request, session
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .repositories import users, vehicles
+from .repositories import records, users, vehicles
 from .repositories.db import get_db
+from .services.management import evaluate_management
+from .services.rule_registry import candidate_rules_for
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -27,11 +31,13 @@ DUPLICATE_KEY_ERROR = 1062
 
 # 차량 입력 규칙은 schema.sql의 vehicles 제약과 맞춥니다.
 VEHICLE_TEXT_LIMITS = {"manufacturer": 40, "model": 40, "engine": 60, "fuel": 30, "transmission": 40}
-# 최소 식별 입력: 제조사와 모델이 있어야 등록할 수 있습니다. 차량 수정 API는 아직 없으므로 빈 차량을 허용하지 않습니다.
+# 최소 식별 입력: 제조사와 모델이 있어야 차량을 저장할 수 있습니다.
 VEHICLE_REQUIRED_TEXT = {"manufacturer", "model"}
 VEHICLE_GENERATIONS = {"DL3", "JF"}
 VEHICLE_CONDITIONS = {"normal", "severe", "unknown"}
-VEHICLE_FIELDS = set(VEHICLE_TEXT_LIMITS) | {"generation", "year", "mileage", "reference_date", "conditions"}
+VEHICLE_FIELDS = set(VEHICLE_TEXT_LIMITS) | {
+    "generation", "year", "mileage", "reference_date", "in_service_date", "conditions", "severe_condition_codes"
+}
 VEHICLE_YEAR_MIN = 1900
 VEHICLE_YEAR_MAX = 2035
 VEHICLE_MILEAGE_MAX = 1000000
@@ -50,11 +56,12 @@ HTTP_ERROR_CODES = {
 }
 
 
-def ok(data, status=200):
+def ok(data, status=200, **meta):
     body = {
         "data": data,
         "meta": {"contract_version": CONTRACT_VERSION, "mode": "live", "calculation_mode": "none"},
     }
+    body["meta"].update(meta)
     return jsonify(body), status
 
 
@@ -268,12 +275,26 @@ def _vehicle_values(body):
         values["reference_date"] = None
     elif isinstance(reference_date, str) and DATE_PATTERN.fullmatch(reference_date):
         try:
-            date.fromisoformat(reference_date)
+            if date.fromisoformat(reference_date) > _today_korea():
+                raise ValueError
             values["reference_date"] = reference_date
         except ValueError:
-            reject("reference_date", "YYYY-MM-DD 형식의 실제 날짜를 입력해 주세요.")
+            reject("reference_date", "한국 기준 오늘 이하의 실제 날짜(YYYY-MM-DD)를 입력해 주세요.")
     else:
         reject("reference_date", "YYYY-MM-DD 형식의 날짜를 입력해 주세요. 모르면 null을 보내 주세요.")
+
+    in_service_date = body.get("in_service_date")
+    if in_service_date is None:
+        values["in_service_date"] = None
+    elif isinstance(in_service_date, str) and DATE_PATTERN.fullmatch(in_service_date):
+        try:
+            if date.fromisoformat(in_service_date) > _today_korea():
+                raise ValueError
+            values["in_service_date"] = in_service_date
+        except ValueError:
+            reject("in_service_date", "한국 기준 오늘 이하의 실제 최초 등록일(YYYY-MM-DD)을 입력해 주세요.")
+    else:
+        reject("in_service_date", "차량등록증의 최초 등록일(YYYY-MM-DD)을 입력해 주세요. 모르면 null로 보내 주세요.")
 
     conditions = body.get("conditions", "unknown")
     if isinstance(conditions, str) and conditions in VEHICLE_CONDITIONS:
@@ -281,11 +302,43 @@ def _vehicle_values(body):
     else:
         reject("conditions", "normal, severe, unknown 중에서 선택해 주세요.")
 
+    severe_condition_codes = body.get("severe_condition_codes", [])
+    if (
+        isinstance(severe_condition_codes, list)
+        and len(severe_condition_codes) <= 12
+        and all(
+            isinstance(code, int) and not isinstance(code, bool) and 1 <= code <= 12
+            for code in severe_condition_codes
+        )
+        and len(set(severe_condition_codes)) == len(severe_condition_codes)
+    ):
+        values["severe_condition_codes"] = sorted(severe_condition_codes)
+        if isinstance(conditions, str) and conditions in VEHICLE_CONDITIONS and conditions != "severe" and severe_condition_codes:
+            reject("severe_condition_codes", "세부 가혹조건은 운행조건을 가혹조건으로 선택했을 때만 입력할 수 있습니다.")
+    else:
+        reject("severe_condition_codes", "기아 설명서의 가혹조건 번호 1~12를 중복 없이 목록으로 입력해 주세요.")
+
     return values, fields
+
+
+def _stored_severe_condition_codes(value):
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+    if not isinstance(value, (list, tuple)):
+        return []
+    codes = {
+        code for code in value
+        if isinstance(code, int) and not isinstance(code, bool) and 1 <= code <= 12
+    }
+    return sorted(codes)
 
 
 def _vehicle_out(row):
     reference_date = row["reference_date"]
+    in_service_date = row["in_service_date"]
     return {
         "id": row["id"],
         "manufacturer": row["manufacturer"],
@@ -297,7 +350,9 @@ def _vehicle_out(row):
         "transmission": row["transmission"],
         "mileage": row["mileage"],
         "reference_date": reference_date.isoformat() if reference_date is not None else None,
+        "in_service_date": in_service_date.isoformat() if in_service_date is not None else None,
         "conditions": row["conditions"],
+        "severe_condition_codes": _stored_severe_condition_codes(row.get("severe_condition_codes", [])),
     }
 
 
@@ -356,6 +411,230 @@ def get_vehicle(vehicle_id):
     if row is None:
         return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
     return ok(_vehicle_out(row))
+
+
+@api.patch("/vehicles/<int:vehicle_id>")
+@login_required
+@csrf_protected
+def update_vehicle(vehicle_id):
+    owner_id = session["user_id"]
+    current = vehicles.find_vehicle_by_id_and_owner(vehicle_id, owner_id)
+    if current is None:
+        return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
+    body = _json_body()
+    if body is None or not body:
+        return fail("VALIDATION_ERROR", "입력을 확인해 주세요", 400, {})
+
+    # PATCH는 전달한 항목만 바꾸고, 생략한 값은 현재 DB 값으로 유지합니다.
+    merged = _vehicle_out(current)
+    merged.pop("id", None)
+    merged.update(body)
+    if "conditions" in body and body.get("conditions") != "severe" and "severe_condition_codes" not in body:
+        merged["severe_condition_codes"] = []
+    values, fields = _vehicle_values(merged)
+    if fields:
+        return fail("VALIDATION_ERROR", "차량 정보를 확인해 주세요", 400, fields)
+
+    db = get_db()
+    try:
+        vehicles.update_vehicle_by_id_and_owner(vehicle_id, owner_id, values)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    row = vehicles.find_vehicle_by_id_and_owner(vehicle_id, owner_id)
+    if row is None:
+        return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
+    return ok(_vehicle_out(row))
+
+
+RECORD_ENUMS = {
+    "kind": {"previous_history", "maintenance_result"},
+    "item_key": {"engine-oil", "air-filter", "spark-plugs", "drive-belt", "brake-pads-discs", "ball-joint", "lower-arm", "lower-arm-ball-joint", "brake-fluid", "cabin-air-filter", "coolant"},
+    "component_position": {"unknown", "front", "rear", "left", "right", "front_left", "front_right", "rear_left", "rear_right"},
+    "work_type": {"inspection", "replacement", "unknown"},
+}
+RECORD_ENUM_DEFAULTS = {"component_position": "unknown"}
+RECORD_TEXT_LIMITS = {"result": 2000, "source": 100}
+RECORD_FIELDS = set(RECORD_ENUMS) | set(RECORD_TEXT_LIMITS) | {"date", "mileage", "checked_date"}
+
+
+def _today_korea():
+    return datetime.now(timezone(timedelta(hours=9))).date()
+
+
+def _record_values(body):
+    fields = {key: "허용되지 않은 필드입니다." for key in set(body) - RECORD_FIELDS}
+    values = {}
+    for key, allowed in RECORD_ENUMS.items():
+        value = body.get(key, RECORD_ENUM_DEFAULTS.get(key))
+        if not isinstance(value, str) or value not in allowed:
+            fields[key] = "허용된 항목을 선택해 주세요."
+        else:
+            values[key] = value
+    for key, limit in RECORD_TEXT_LIMITS.items():
+        value = body.get(key)
+        if value is None:
+            values[key] = None
+        elif isinstance(value, str) and value.strip() and len(value) <= limit:
+            values[key] = value
+        else:
+            fields[key] = f"1~{limit}자로 입력하거나 모르면 null을 보내 주세요."
+    mileage = body.get("mileage")
+    if mileage is None or (_is_int(mileage) and 0 <= mileage <= VEHICLE_MILEAGE_MAX):
+        values["mileage"] = mileage
+    else:
+        fields["mileage"] = "0~1,000,000의 정수 또는 null을 보내 주세요."
+    for key in ("date", "checked_date"):
+        value = body.get(key)
+        parsed = None
+        if value is not None:
+            try:
+                if not isinstance(value, str) or not DATE_PATTERN.fullmatch(value):
+                    raise ValueError
+                parsed = date.fromisoformat(value)
+                if parsed > _today_korea():
+                    raise ValueError
+            except ValueError:
+                fields[key] = "한국 기준 오늘 이하의 실제 날짜(YYYY-MM-DD) 또는 null을 보내 주세요."
+        values["record_date" if key == "date" else key] = parsed
+    return values, fields
+
+
+def _record_out(row):
+    data = {key: row[key] for key in ("id", "vehicle_id", "kind", "item_key", "component_position", "work_type", "mileage", "result", "source")}
+    for source, target in (("record_date", "date"), ("checked_date", "checked_date")):
+        data[target] = row[source].isoformat() if row[source] is not None else None
+    data["created_at"] = row["created_at"].isoformat(timespec="microseconds") + "Z"
+    return data
+
+
+@api.get("/vehicles/<int:vehicle_id>/records")
+@login_required
+def list_records(vehicle_id):
+    if vehicles.find_vehicle_by_id_and_owner(vehicle_id, session["user_id"]) is None:
+        return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
+    try:
+        if set(request.args) - {"page", "page_size"} or any(len(request.args.getlist(key)) != 1 for key in request.args):
+            raise ValueError
+        raw_page, raw_size = request.args.get("page", "1"), request.args.get("page_size", "20")
+        if not re.fullmatch(r"[0-9]{1,9}", raw_page) or not re.fullmatch(r"[0-9]{1,3}", raw_size):
+            raise ValueError
+        page, page_size = int(raw_page), int(raw_size)
+        if page < 1 or not 1 <= page_size <= 100:
+            raise ValueError
+    except ValueError:
+        return fail("VALIDATION_ERROR", "page는 양의 정수, page_size는 1~100으로 입력해 주세요.", 400)
+    rows = records.list_records_by_vehicle(vehicle_id, page, page_size)
+    return ok([_record_out(row) for row in rows], pagination={
+        "page": page, "page_size": page_size, "total": records.count_records(vehicle_id),
+    })
+
+
+@api.post("/vehicles/<int:vehicle_id>/records")
+@login_required
+@csrf_protected
+def add_record(vehicle_id):
+    if vehicles.find_vehicle_by_id_and_owner(vehicle_id, session["user_id"]) is None:
+        return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
+    body = _json_body()
+    if body is None:
+        return fail("VALIDATION_ERROR", "입력을 확인해 주세요", 400)
+    values, fields = _record_values(body)
+    if fields:
+        return fail("VALIDATION_ERROR", "입력을 확인해 주세요", 400, fields)
+    db = get_db()
+    try:
+        record_id = records.create_record(vehicle_id, values)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    row = records.find_record_by_id_and_vehicle(record_id, vehicle_id)
+    if row is None:
+        raise RuntimeError("저장한 기록을 다시 읽지 못했습니다.")
+    return ok(_record_out(row), 201)
+
+
+@api.patch("/records/<int:record_id>")
+@login_required
+@csrf_protected
+def update_record(record_id):
+    current = records.find_record_by_id_and_owner(record_id, session["user_id"])
+    if current is None:
+        return fail("NOT_FOUND", "기록을 찾을 수 없습니다.", 404)
+    body = _json_body()
+    if body is None or not body:
+        return fail("VALIDATION_ERROR", "수정할 내용을 입력해 주세요.", 400, {})
+
+    current_data = _record_out(current)
+    merged = {key: current_data[key] for key in RECORD_FIELDS}
+    merged.update(body)
+    values, fields = _record_values(merged)
+    if fields:
+        return fail("VALIDATION_ERROR", "입력을 확인해 주세요", 400, fields)
+
+    db = get_db()
+    try:
+        records.update_record(record_id, session["user_id"], values)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    row = records.find_record_by_id_and_owner(record_id, session["user_id"])
+    if row is None:
+        return fail("NOT_FOUND", "기록을 찾을 수 없습니다.", 404)
+    return ok(_record_out(row))
+
+
+@api.delete("/records/<int:record_id>")
+@login_required
+@csrf_protected
+def remove_record(record_id):
+    db = get_db()
+    try:
+        deleted = records.delete_record(record_id, session["user_id"])
+        if not deleted:
+            db.rollback()
+            return fail("NOT_FOUND", "기록을 찾을 수 없습니다.", 404)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return ok({"id": record_id, "deleted": True})
+
+
+@api.get("/vehicles/<int:vehicle_id>/management")
+@login_required
+def get_management(vehicle_id):
+    vehicle = vehicles.find_vehicle_by_id_and_owner(vehicle_id, session["user_id"])
+    if vehicle is None:
+        return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
+    rules = candidate_rules_for(_vehicle_out(vehicle))
+    calculation_mode = "candidate_rights_pending" if rules else "unavailable"
+    if not rules:
+        rules = [None]
+    if current_app.config.get("CHAGEUN_ALLOW_TEST_FIXTURE"):
+        # 개발자가 명시적으로 허용한 가상 시험 기준만 사용합니다. 실제 제조사 기준이 아닙니다.
+        rule = json.loads((Path(__file__).parent / "services/test_rule.json").read_text(encoding="utf-8"))
+        rules = [rule]
+        calculation_mode = "test_fixture"
+    as_of_date = current_app.config.get("CHAGEUN_MANAGEMENT_AS_OF_DATE") or _today_korea().isoformat()
+    items = [_record_out(row) for row in records.list_records_for_management(vehicle_id)]
+    positional_item_keys = {"brake-pads-discs", "ball-joint", "lower-arm", "lower-arm-ball-joint"}
+    positions = ("front_left", "front_right", "rear_left", "rear_right")
+    evaluated = []
+    for rule in rules:
+        if isinstance(rule, dict) and rule.get("item_key") in positional_item_keys:
+            evaluated.extend(
+                evaluate_management(_vehicle_out(vehicle), items, rule, as_of_date, component_position=position)
+                for position in positions
+            )
+        else:
+            evaluated.append(evaluate_management(_vehicle_out(vehicle), items, rule, as_of_date))
+    return ok({"vehicle_id": vehicle_id, "items": evaluated}, calculation_mode=calculation_mode)
 
 
 @api.errorhandler(Exception)

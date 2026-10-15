@@ -1,0 +1,292 @@
+"""실제 기록과 순수 관리판단 엔진을 연결하는 API의 경계 시험."""
+
+import copy
+import json
+from datetime import date
+from pathlib import Path
+import unittest
+import test_records_api as support
+
+
+class ManagementApiTests(unittest.TestCase):
+    post = support.RecordsApiTests.post
+
+    def setUp(self):
+        support.RecordsApiTests.setUp(self)
+        self.fixture = json.loads((Path(__file__).parent / "fixtures/management.json").read_text(encoding="utf-8"))
+        vehicle = copy.deepcopy(self.fixture["input"]["vehicle"])
+        vehicle["reference_date"] = date.fromisoformat(vehicle["reference_date"])
+        self.vehicles.rows[0].update(vehicle)
+        self.app.config["CHAGEUN_MANAGEMENT_AS_OF_DATE"] = self.fixture["input"]["as_of_date"]
+        self.management_path = f"/api/vehicles/{self.vehicle_id}/management"
+
+    def item(self):
+        response = self.client.get(self.management_path)
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(body["data"]["vehicle_id"], self.vehicle_id)
+        items = body["data"]["items"]
+        oil_item = next((item for item in items if item["item_key"] == "engine-oil"), None)
+        self.assertIsNotNone(oil_item)
+        return oil_item, body["meta"]
+
+    def test_default_uses_candidate_and_exposes_pending_rights(self):
+        item, meta = self.item()
+        self.assertEqual(meta["calculation_mode"], "candidate_rights_pending")
+        self.assertEqual(item["timing_status"], "unknown")
+        self.assertIsNone(item["next_mileage"])
+        self.assertIsNone(item["next_date"])
+        self.assertIn("records", item["missing_fields"])
+        self.assertFalse(item["is_fixture"])
+        self.assertEqual(item["rule_id"], "KIA_DL3_2021_G20_OIL_NORMAL_CANDIDATE")
+        self.assertTrue(item["rights_review_pending"])
+        self.assertEqual(item["rights_status_label"], "사용 권리 확인 중")
+
+    def test_known_history_is_preserved_with_candidate_rule(self):
+        self.assertEqual(self.post({**support.VALID_RECORD, "work_type": "inspection"}).status_code, 201)
+        item, meta = self.item()
+        self.assertEqual(item["history_status"], "recorded")
+        self.assertEqual(item["timing_status"], "unknown")
+        self.assertEqual(meta["calculation_mode"], "candidate_rights_pending")
+
+    def test_candidate_rule_calculates_while_rights_pending_and_keeps_status(self):
+        self.assertEqual(self.post({**support.VALID_RECORD, "date": "2026-01-01", "mileage": 10000}).status_code, 201)
+        item, meta = self.item()
+        self.assertEqual(meta["calculation_mode"], "candidate_rights_pending")
+        self.assertEqual(item["rule_id"], "KIA_DL3_2021_G20_OIL_NORMAL_CANDIDATE")
+        self.assertTrue(item["rights_review_pending"])
+        self.assertEqual(item["rights_status_label"], "사용 권리 확인 중")
+        self.assertEqual(item["timing_status"], "due")
+        self.assertEqual(item["next_mileage"], 25_000)
+        self.assertEqual(item["next_date"], "2027-01-01")
+
+    def test_brake_fluid_and_cabin_filter_are_returned_as_pending_candidates(self):
+        vehicle = self.vehicles.rows[0]
+        vehicle.update(mileage=90_000, reference_date=date.fromisoformat(self.fixture["input"]["as_of_date"]))
+        body = self.client.get(self.management_path).get_json()
+        items = {item["item_key"]: item for item in body["data"]["items"]}
+        self.assertEqual(body["meta"]["calculation_mode"], "candidate_rights_pending")
+        for item_key, first_mileage in (("brake-fluid", 50_000), ("cabin-air-filter", 15_000)):
+            with self.subTest(item_key=item_key):
+                item = items[item_key]
+                self.assertEqual(item["timing_status"], "due")
+                self.assertEqual(item["history_status"], "unknown")
+                self.assertEqual(item["next_mileage"], first_mileage)
+                self.assertTrue(item["rights_review_pending"])
+                self.assertEqual(item["rights_status_label"], "사용 권리 확인 중")
+
+    def test_engine_air_cleaner_returns_independent_inspection_and_replacement_guidance(self):
+        vehicle = self.vehicles.rows[0]
+        vehicle.update(mileage=30_000, reference_date=date.fromisoformat(self.fixture["input"]["as_of_date"]))
+        self.assertEqual(self.post({
+            **support.VALID_RECORD, "kind": "previous_history", "item_key": "air-filter",
+            "work_type": "inspection", "date": "2026-10-01", "mileage": 20_000,
+        }).status_code, 201)
+
+        response = self.client.get(self.management_path).get_json()
+        items = [item for item in response["data"]["items"] if item["item_key"] == "air-filter"]
+        by_action = {item["action"]: item for item in items}
+        self.assertEqual(set(by_action), {"inspection", "replacement"})
+        self.assertEqual(by_action["inspection"]["next_mileage"], 30_000)
+        self.assertEqual(by_action["inspection"]["timing_status"], "due")
+        self.assertEqual(by_action["replacement"]["next_mileage"], 40_000)
+        self.assertEqual(by_action["replacement"]["timing_status"], "upcoming")
+        self.assertTrue(all(item["rights_review_pending"] for item in by_action.values()))
+
+        self.assertEqual(self.post({
+            **support.VALID_RECORD, "kind": "previous_history", "item_key": "air-filter",
+            "work_type": "replacement", "date": "2026-10-05", "mileage": 25_000,
+        }).status_code, 201)
+        response = self.client.get(self.management_path).get_json()
+        items = [item for item in response["data"]["items"] if item["item_key"] == "air-filter"]
+        by_action = {item["action"]: item for item in items}
+        self.assertEqual(by_action["inspection"]["next_mileage"], 35_000)
+        self.assertEqual(by_action["replacement"]["next_mileage"], 65_000)
+
+    def test_spark_plug_candidate_uses_165000_km_and_replacement_history_restarts_interval(self):
+        vehicle = self.vehicles.rows[0]
+        vehicle.update(mileage=90_000, reference_date=date.fromisoformat(self.fixture["input"]["as_of_date"]))
+        body = self.client.get(self.management_path).get_json()
+        spark_plugs = next(item for item in body["data"]["items"] if item["item_key"] == "spark-plugs")
+        self.assertEqual(spark_plugs["timing_status"], "upcoming")
+        self.assertEqual(spark_plugs["history_status"], "unknown")
+        self.assertEqual(spark_plugs["next_mileage"], 165_000)
+        self.assertEqual(spark_plugs["action"], "replacement")
+        self.assertEqual(spark_plugs["rights_status_label"], "사용 권리 확인 중")
+
+        response = self.post({
+            **support.VALID_RECORD, "kind": "previous_history", "item_key": "spark-plugs",
+            "work_type": "replacement", "date": "2025-10-01", "mileage": 80_000,
+        })
+        self.assertEqual(response.status_code, 201)
+        body = self.client.get(self.management_path).get_json()
+        spark_plugs = next(item for item in body["data"]["items"] if item["item_key"] == "spark-plugs")
+        self.assertEqual(spark_plugs["history_status"], "recorded")
+        self.assertEqual(spark_plugs["next_mileage"], 245_000)
+        self.assertTrue(spark_plugs["rights_review_pending"])
+
+    def test_item_specific_severe_guidance_uses_selected_manual_condition_codes(self):
+        vehicle = self.vehicles.rows[0]
+        vehicle.update(conditions="severe", severe_condition_codes=[2])
+        body = self.client.get(self.management_path).get_json()
+        items = body["data"]["items"]
+        self.assertFalse(any(item["item_key"] == "spark-plugs" for item in items))
+        air_filter = next(item for item in items if item["item_key"] == "air-filter")
+        self.assertTrue(air_filter["condition_based"])
+        self.assertIsNone(air_filter["next_mileage"])
+        self.assertEqual(air_filter["rights_status_label"], "사용 권리 확인 중")
+        self.assertIn("2", air_filter["reasons"][0])
+
+        vehicle["severe_condition_codes"] = [1]
+        body = self.client.get(self.management_path).get_json()
+        items = body["data"]["items"]
+        self.assertFalse(any(item["item_key"] == "air-filter" for item in items))
+        spark_plugs = next(item for item in items if item["item_key"] == "spark-plugs")
+        self.assertTrue(spark_plugs["condition_based"])
+        self.assertIsNone(spark_plugs["interval_km"])
+        self.assertEqual(spark_plugs["rights_status_label"], "사용 권리 확인 중")
+        self.assertIn("1", spark_plugs["reasons"][0])
+
+    def test_severe_engine_oil_requires_selected_condition_and_returns_matched_code(self):
+        vehicle = self.vehicles.rows[0]
+        vehicle.update(
+            conditions="severe",
+            severe_condition_codes=[12],
+            mileage=90_000,
+            reference_date=date.fromisoformat(self.fixture["input"]["as_of_date"]),
+        )
+        response = self.post({
+            **support.VALID_RECORD,
+            "kind": "previous_history",
+            "item_key": "engine-oil",
+            "work_type": "replacement",
+            "date": "2025-10-01",
+            "mileage": 80_000,
+        })
+        self.assertEqual(response.status_code, 201)
+
+        body = self.client.get(self.management_path).get_json()
+        oil = next(item for item in body["data"]["items"] if item["item_key"] == "engine-oil")
+        self.assertEqual(oil["interval_km"], 7_500)
+        self.assertEqual(oil["interval_months"], 6)
+        self.assertEqual(oil["next_mileage"], 87_500)
+        self.assertEqual(oil["next_date"], "2026-04-01")
+        self.assertEqual(oil["matched_severe_condition_codes"], [12])
+        self.assertTrue(oil["rights_review_pending"])
+
+        vehicle["severe_condition_codes"] = []
+        body = self.client.get(self.management_path).get_json()
+        self.assertFalse(any(item["item_key"] == "engine-oil" for item in body["data"]["items"]))
+
+    def test_only_verified_candidate_year_and_conditions_resolve(self):
+        vehicle = self.vehicles.rows[0]
+        vehicle["year"] = 2022
+        item, _ = self.item()
+        self.assertIsNone(item["rule_id"])
+        self.assertIn("rule", item["missing_fields"])
+        vehicle["year"] = 2021
+        vehicle["conditions"] = "severe"
+        vehicle["severe_condition_codes"] = [1]
+        item, _ = self.item()
+        self.assertEqual(item["rule_id"], "KIA_DL3_2021_G20_OIL_SEVERE_CANDIDATE")
+
+    def test_explicit_fixture_and_record_mapping_match_engine_contract(self):
+        self.app.config["CHAGEUN_ALLOW_TEST_FIXTURE"] = True
+        record = self.fixture["input"]["records"][0]
+        payload = {key: value for key, value in record.items() if key not in ("id", "vehicle_id", "created_at")}
+        self.assertEqual(self.post(payload).status_code, 201)
+        item, meta = self.item()
+        self.assertEqual(meta["calculation_mode"], "test_fixture")
+        for field in self.fixture["compare_fields"]:
+            self.assertEqual(item[field], self.fixture["expected"][field], field)
+
+    def test_inspection_does_not_reset_replacement_or_unknown_history(self):
+        self.app.config["CHAGEUN_ALLOW_TEST_FIXTURE"] = True
+        self.post({**support.VALID_RECORD, "work_type": "unknown"})
+        item, _ = self.item()
+        self.assertEqual(item["history_status"], "unknown")
+        self.post({**support.VALID_RECORD, "work_type": "inspection"})
+        item, _ = self.item()
+        self.assertEqual(item["history_status"], "recorded")
+        self.assertEqual(item["timing_status"], "unknown")
+        self.assertIsNone(item["next_date"])
+
+    def test_jf_is_unsupported_and_unknown_conditions_are_unknown(self):
+        self.app.config["CHAGEUN_ALLOW_TEST_FIXTURE"] = True
+        self.vehicles.rows[0]["generation"] = "JF"
+        self.assertEqual(self.item()[0]["timing_status"], "unsupported")
+        self.vehicles.rows[0]["generation"] = "DL3"
+        self.vehicles.rows[0]["conditions"] = "unknown"
+        self.assertEqual(self.item()[0]["timing_status"], "unknown")
+
+    def test_management_auth_and_ownership(self):
+        anonymous = self.app.test_client()
+        self.assertEqual(anonymous.get(self.management_path).status_code, 401)
+        with anonymous.session_transaction() as session:
+            session["user_id"] = 2
+        other = anonymous.get(self.management_path)
+        missing = anonymous.get("/api/vehicles/999/management")
+        self.assertEqual(other.status_code, 404)
+        self.assertEqual(other.get_json(), missing.get_json())
+
+    def test_brake_and_ball_joint_guidance_is_scoped_to_four_positions(self):
+        response = self.client.get(self.management_path)
+        items = response.get_json()["data"]["items"]
+        for item_key in ("brake-pads-discs", "ball-joint"):
+            scoped = [item for item in items if item["item_key"] == item_key]
+            self.assertEqual(
+                {item["component_position"] for item in scoped},
+                {"front_left", "front_right", "rear_left", "rear_right"},
+            )
+
+    def test_brake_history_does_not_mark_the_opposite_corner_as_recorded(self):
+        record = {
+            **support.VALID_RECORD,
+            "item_key": "brake-pads-discs",
+            "component_position": "front_left",
+            "work_type": "inspection",
+            "date": "2026-01-01",
+            "mileage": 10000,
+        }
+        self.assertEqual(self.post(record).status_code, 201)
+        items = self.client.get(self.management_path).get_json()["data"]["items"]
+        scoped = {item["component_position"]: item for item in items if item["item_key"] == "brake-pads-discs"}
+        self.assertEqual(scoped["front_left"]["history_status"], "recorded")
+        self.assertEqual(scoped["front_right"]["history_status"], "unknown")
+
+    def test_lower_arm_replacement_is_separate_from_ball_joint_inspection_history(self):
+        record = {
+            **support.VALID_RECORD,
+            "item_key": "lower-arm",
+            "component_position": "front_right",
+            "work_type": "replacement",
+            "date": "2026-01-01",
+            "mileage": 90000,
+        }
+        created = self.post(record)
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.get_json()["data"]["item_key"], "lower-arm")
+
+        stored = self.client.get(f"/api/vehicles/{self.vehicle_id}/records").get_json()["data"]
+        self.assertEqual([entry["item_key"] for entry in stored], ["lower-arm"])
+        items = self.client.get(self.management_path).get_json()["data"]["items"]
+        ball_joint = next(
+            item for item in items
+            if item["item_key"] == "ball-joint" and item["component_position"] == "front_right"
+        )
+        self.assertEqual(ball_joint["history_status"], "unknown")
+
+    def test_unknown_brake_record_location_is_reported_as_missing_information(self):
+        record = {
+            **support.VALID_RECORD,
+            "item_key": "brake-pads-discs",
+            "component_position": "unknown",
+            "work_type": "inspection",
+            "date": "2026-01-01",
+            "mileage": 10000,
+        }
+        self.assertEqual(self.post(record).status_code, 201)
+        items = self.client.get(self.management_path).get_json()["data"]["items"]
+        front_left = next(item for item in items if item["item_key"] == "brake-pads-discs" and item["component_position"] == "front_left")
+        self.assertEqual(front_left["history_status"], "unknown")
+        self.assertIn("record.component_position", front_left["missing_fields"])

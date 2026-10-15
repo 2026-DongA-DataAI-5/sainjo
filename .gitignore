@@ -1,7 +1,11 @@
 .venv/
+source/tests/node_modules/
 __pycache__/
 *.py[cod]
 .env
+.env.*
+.mysql-test/
+/source/docs/
 instance/
 *.log
 /docs/

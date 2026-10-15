@@ -8,6 +8,7 @@
     .\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p "test_api*.py"
 """
 
+import copy
 import os
 import re
 import secrets
@@ -96,7 +97,9 @@ VEHICLE_FIELD_KEYS = {
     "transmission",
     "mileage",
     "reference_date",
+    "in_service_date",
     "conditions",
+    "severe_condition_codes",
 }
 VALID_VEHICLE = {
     "manufacturer": "현대",
@@ -108,7 +111,9 @@ VALID_VEHICLE = {
     "transmission": "자동",
     "mileage": 0,
     "reference_date": "2026-10-01",
+    "in_service_date": None,
     "conditions": "normal",
+    "severe_condition_codes": [],
 }
 
 
@@ -365,6 +370,7 @@ class FakeVehicles:
             raise pymysql.err.IntegrityError(1062, "Duplicate entry for key 'uq_vehicles_owner'")
         row = {key: values[key] for key in VEHICLE_FIELD_KEYS - {"id"}}
         row["reference_date"] = date.fromisoformat(values["reference_date"]) if values["reference_date"] else None
+        row["in_service_date"] = date.fromisoformat(values["in_service_date"]) if values["in_service_date"] else None
         row.update({"id": self.next_id, "owner_id": owner_id})
         self.next_id += 1
         self.rows.append(row)
@@ -382,6 +388,19 @@ class FakeVehicles:
                 return self._public(row)
         return None
 
+    def update_vehicle_by_id_and_owner(self, vehicle_id, owner_id, values):
+        for row in self.rows:
+            if row["id"] == vehicle_id and row["owner_id"] == owner_id:
+                row.update(values)
+                row["reference_date"] = (
+                    date.fromisoformat(values["reference_date"]) if values["reference_date"] else None
+                )
+                row["in_service_date"] = (
+                    date.fromisoformat(values["in_service_date"]) if values["in_service_date"] else None
+                )
+                return 1
+        return 0
+
 
 class VehicleApiTest(unittest.TestCase):
     def setUp(self):
@@ -395,6 +414,10 @@ class VehicleApiTest(unittest.TestCase):
         mock.patch("chageun.api.vehicles.find_vehicle_by_owner", side_effect=self.vehicles.by_owner).start()
         mock.patch(
             "chageun.api.vehicles.find_vehicle_by_id_and_owner", side_effect=self.vehicles.by_id_and_owner
+        ).start()
+        mock.patch(
+            "chageun.api.vehicles.update_vehicle_by_id_and_owner",
+            side_effect=self.vehicles.update_vehicle_by_id_and_owner,
         ).start()
         mock.patch("chageun.api.get_db", return_value=self.db).start()
         self.addCleanup(mock.patch.stopall)
@@ -423,6 +446,10 @@ class VehicleApiTest(unittest.TestCase):
     def create(self, client, body=None):
         payload = VALID_VEHICLE if body is None else body
         return client.post("/api/vehicles", json=payload, headers={"X-CSRF-Token": self.csrf(client)})
+
+    def patch_vehicle(self, client, vehicle_id, body, csrf=True):
+        headers = {"X-CSRF-Token": self.csrf(client)} if csrf else {}
+        return client.patch(f"/api/vehicles/{vehicle_id}", json=body, headers=headers)
 
     def assert_error(self, response, status, code):
         self.assertEqual(response.status_code, status)
@@ -482,6 +509,113 @@ class VehicleApiTest(unittest.TestCase):
         self.assertIsNone(data["mileage"])
         self.assertIsNone(data["reference_date"])
         self.assertEqual(data["conditions"], "unknown")
+
+    def test_patch_vehicle_updates_fields_and_preserves_omitted_values(self):
+        self.create(self.client_a)
+        response = self.patch_vehicle(self.client_a, 1, {"mileage": 0, "reference_date": None})
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()["data"]
+        self.assertEqual(data["mileage"], 0)
+        self.assertIsNone(data["reference_date"])
+        self.assertEqual(data["model"], VALID_VEHICLE["model"])
+        self.assertEqual(self.client_a.get("/api/vehicles/1").get_json()["data"], data)
+        response = self.patch_vehicle(self.client_a, 1, {"model": "K5 부분 수정", "year": 2022})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["data"]["model"], "K5 부분 수정")
+        self.assertEqual(response.get_json()["data"]["year"], 2022)
+        self.assertEqual(response.get_json()["data"]["mileage"], 0)
+        self.assertIsNone(response.get_json()["data"]["reference_date"])
+        response = self.patch_vehicle(self.client_a, 1, {"mileage": None, "reference_date": "2026-01-31"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.get_json()["data"]["mileage"])
+        self.assertEqual(response.get_json()["data"]["reference_date"], "2026-01-31")
+
+    def test_severe_condition_codes_are_saved_and_cleared_when_condition_becomes_normal(self):
+        response = self.create(self.client_a, {
+            "manufacturer": "기아", "model": "K5", "conditions": "severe",
+            "severe_condition_codes": [9, 1],
+        })
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["data"]["severe_condition_codes"], [1, 9])
+        updated = self.patch_vehicle(self.client_a, 1, {"conditions": "normal"})
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.get_json()["data"]["severe_condition_codes"], [])
+
+    def test_severe_condition_codes_require_unique_in_range_integer_list_and_severe_mode(self):
+        for codes in ([0], [13], [1, 1], "1,3", [True], None):
+            with self.subTest(codes=codes):
+                response = self.create(self.client_a, {
+                    "manufacturer": "기아", "model": "K5", "conditions": "severe",
+                    "severe_condition_codes": codes,
+                })
+                self.assert_error(response, 400, "VALIDATION_ERROR")
+        response = self.create(self.client_a, {
+            "manufacturer": "기아", "model": "K5", "conditions": "normal",
+            "severe_condition_codes": [1],
+        })
+        self.assert_error(response, 400, "VALIDATION_ERROR")
+        self.assertEqual(self.vehicles.rows, [])
+
+    def test_patch_vehicle_requires_csrf_and_preserves_values(self):
+        self.create(self.client_a)
+        before = self.client_a.get("/api/vehicles/1").get_json()["data"]
+        response = self.patch_vehicle(self.client_a, 1, {"mileage": 10, "reference_date": None}, csrf=False)
+        self.assert_error(response, 403, "CSRF_FAILED")
+        self.assertEqual(self.client_a.get("/api/vehicles/1").get_json()["data"], before)
+
+    def test_patch_vehicle_hides_missing_and_other_account_vehicles(self):
+        self.create(self.client_a)
+        self.assert_error(self.patch_vehicle(self.client_b, 1, {"mileage": 10, "reference_date": None}), 404, "NOT_FOUND")
+        self.assert_error(self.patch_vehicle(self.client_a, 999, {"mileage": 10, "reference_date": None}), 404, "NOT_FOUND")
+        self.assertEqual(
+            self.vehicles.by_id_and_owner(1, self.users.by_username("tester_a")["id"])["mileage"],
+            VALID_VEHICLE["mileage"],
+        )
+
+    def test_patch_vehicle_rejects_invalid_payloads_without_changing_vehicle(self):
+        self.create(self.client_a)
+        invalid_payloads = [
+            {},
+            {"manufacturer": None},
+            {"model": " "},
+            {"model": "M" * 41},
+            {"year": 2036},
+            {"generation": "unknown"},
+            {"mileage": -1, "reference_date": None},
+            {"mileage": 1000001, "reference_date": None},
+            {"mileage": True, "reference_date": None},
+            {"mileage": "100", "reference_date": None},
+            {"mileage": 10, "reference_date": "2026-02-30"},
+            {"mileage": 10, "reference_date": "2999-01-01"},
+            {"id": 999},
+            {"not_editable": "value"},
+        ]
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                self.assert_error(self.patch_vehicle(self.client_a, 1, payload), 400, "VALIDATION_ERROR")
+                self.assertEqual(
+                    self.client_a.get("/api/vehicles/1").get_json()["data"]["mileage"],
+                    VALID_VEHICLE["mileage"],
+                )
+
+    def test_create_rejects_non_string_conditions_without_saving(self):
+        for conditions in ([], {}, ["normal"]):
+            with self.subTest(conditions=conditions):
+                body = {**VALID_VEHICLE, "conditions": conditions}
+                response = self.create(self.client_a, body)
+                error = self.assert_error(response, 400, "VALIDATION_ERROR")
+                self.assertIn("conditions", error["error"]["fields"])
+                self.assertEqual(self.vehicles.rows, [])
+
+    def test_patch_rejects_non_string_conditions_without_changing_vehicle(self):
+        self.create(self.client_a)
+        before = copy.deepcopy(self.vehicles.rows)
+        for conditions in ([], {}, ["normal"]):
+            with self.subTest(conditions=conditions):
+                response = self.patch_vehicle(self.client_a, 1, {"conditions": conditions})
+                error = self.assert_error(response, 400, "VALIDATION_ERROR")
+                self.assertIn("conditions", error["error"]["fields"])
+                self.assertEqual(self.vehicles.rows, before)
 
     def test_second_vehicle_for_same_account_is_409(self):
         self.assertEqual(self.create(self.client_a).status_code, 201)
@@ -578,6 +712,12 @@ class VehicleApiTest(unittest.TestCase):
     def test_empty_body_reports_required_fields(self):
         error = self.assert_error(self.create(self.client_a, {}), 400, "VALIDATION_ERROR")
         self.assertEqual(set(error["error"]["fields"]), {"manufacturer", "model"})
+
+    def test_future_reference_date_is_rejected(self):
+        response = self.create(self.client_a, {**VALID_VEHICLE, "reference_date": "2999-01-01"})
+        body = self.assert_error(response, 400, "VALIDATION_ERROR")
+        self.assertIn("reference_date", body["error"]["fields"])
+        self.assertEqual(self.vehicles.rows, [])
 
     def test_blank_strings_are_400_and_null_is_the_way_to_say_unknown(self):
         blanks = {

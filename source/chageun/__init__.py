@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 
 
 def _env_flag(name):
@@ -13,6 +13,7 @@ def create_app(test_config=None):
     app.config.update(
         # 서버 모드에서만 인증·DB 기능을 켭니다. 기본값은 꺼짐입니다.
         CHAGEUN_SERVER_MODE=_env_flag("CHAGEUN_SERVER_MODE"),
+        CHAGEUN_ALLOW_TEST_FIXTURE=_env_flag("CHAGEUN_ALLOW_TEST_FIXTURE"),
         SECRET_KEY=os.environ.get("CHAGEUN_SECRET_KEY"),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
@@ -47,10 +48,14 @@ def create_app(test_config=None):
 
     @app.after_request
     def add_headers(response):
+        if request.path.startswith("/api/") or (app.config["CHAGEUN_SERVER_MODE"] and not request.path.startswith("/static/")):
+            response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self'; style-src 'self'; "
+            "default-src 'self'; script-src 'self'; "
+            "style-src 'self' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data:; object-src 'none'; base-uri 'self'; "
             "frame-ancestors 'none'; form-action 'self'"
         )
