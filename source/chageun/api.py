@@ -6,6 +6,7 @@
 import re
 import secrets
 import json
+import hashlib
 from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 from functools import wraps
@@ -15,7 +16,7 @@ from flask import Blueprint, current_app, g, jsonify, request, session
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .repositories import records, users, vehicles
+from .repositories import question_selections, records, users, vehicles
 from .repositories.db import get_db
 from .services.management import evaluate_management
 from .services.rule_registry import candidate_rules_for
@@ -606,6 +607,42 @@ def remove_record(record_id):
     return ok({"id": record_id, "deleted": True})
 
 
+@api.route("/vehicles/<int:vehicle_id>/question-selections", methods=["GET"])
+@login_required
+def list_question_selections(vehicle_id):
+    if vehicles.find_vehicle_by_id_and_owner(vehicle_id, session["user_id"]) is None:
+        return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
+    return ok({"selected_question_keys": question_selections.list_keys(vehicle_id)})
+
+
+@api.route("/vehicles/<int:vehicle_id>/question-selections", methods=["PATCH", "DELETE"])
+@login_required
+@csrf_protected
+def update_question_selections(vehicle_id):
+    if vehicles.find_vehicle_by_id_and_owner(vehicle_id, session["user_id"]) is None:
+        return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
+    body = _json_body() if request.method == "PATCH" else None
+    if request.method == "PATCH":
+        if body is None or set(body) != {"question_key", "selected"}:
+            return fail("VALIDATION_ERROR", "질문 키와 선택 여부를 입력해 주세요.", 400)
+        key, selected = body["question_key"], body["selected"]
+        if not isinstance(key, str) or not re.fullmatch(r"[a-f0-9]{64}", key) or not isinstance(selected, bool):
+            return fail("VALIDATION_ERROR", "질문 키와 선택 여부의 형식이 올바르지 않습니다.", 400)
+    db = get_db()
+    try:
+        if request.method == "DELETE":
+            question_selections.clear(vehicle_id)
+        elif not question_selections.set_selected(vehicle_id, key, selected):
+            db.rollback()
+            return fail("CONFLICT", "저장할 수 있는 질문 수를 초과했습니다. 선택을 초기화한 뒤 다시 선택해 주세요.", 409)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    # 변경한 한 항목만 응답해 다른 탭의 늦은 응답이 체크 상태를 덮어쓰지 않게 합니다.
+    return ok({"cleared": True} if request.method == "DELETE" else {"question_key": key, "selected": selected})
+
+
 @api.get("/vehicles/<int:vehicle_id>/management")
 @login_required
 def get_management(vehicle_id):
@@ -634,6 +671,15 @@ def get_management(vehicle_id):
             )
         else:
             evaluated.append(evaluate_management(_vehicle_out(vehicle), items, rule, as_of_date))
+    for item in evaluated:
+        # 질문 내용·대상 부품·위치·적용 기준이 바뀌면 과거 선택이 새 질문에 붙지 않습니다.
+        item["question_keys"] = [
+            hashlib.sha256(json.dumps([
+                item.get("rule_id"), item["item_key"], item.get("component_position"),
+                item.get("action"), question,
+            ], ensure_ascii=False).encode("utf-8")).hexdigest()
+            for question in item.get("questions", [])
+        ]
     return ok({"vehicle_id": vehicle_id, "items": evaluated}, calculation_mode=calculation_mode)
 
 
