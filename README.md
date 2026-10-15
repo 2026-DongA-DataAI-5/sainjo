@@ -72,7 +72,7 @@ MySQL 8.0 실행 파일이 설치된 Windows에서 최초 한 번 아래를 실�
 
 ## 검증
 
-기본 전체 시험은 실제 MySQL 시험 5개를 건너뜁니다. `--mysql`은 준비된 전용 시험 DB에 연결합니다. 기존 가드가 DB 이름, 연결 DB, 테이블, 비어 있는 users를 확인하므로 사용자 DB를 비우거나 우회하지 않습니다.
+기본 전체 시험은 실제 MySQL 시험 9개를 건너뜁니다. `--mysql`은 준비된 전용 시험 DB에 연결합니다. 기존 가드가 DB 이름, 연결 DB, 테이블, 비어 있는 users를 확인하므로 사용자 DB를 비우거나 우회하지 않습니다. 기존 시험 DB에 자료가 있으면 새 전용 DB를 준비하거나 GitHub Actions의 임시 MySQL에서 검증합니다.
 
 ```powershell
 .\.venv\Scripts\python.exe -B source/scripts/run_tests.py
