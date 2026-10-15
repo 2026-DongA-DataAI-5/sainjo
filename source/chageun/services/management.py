@@ -85,6 +85,9 @@ def _empty_item(
         "reasons": reasons or [],
         "missing_fields": missing_fields or [],
         "rule_id": rule.get("rule_id") if isinstance(rule.get("rule_id"), str) else None,
+        "rights_status": rule.get("rights_status") if isinstance(rule.get("rights_status"), str) else None,
+        "rights_status_label": "사용 권리 확인 중" if rule.get("rights_status") == "pending_confirmation" else None,
+        "rights_review_pending": rule.get("rights_status") == "pending_confirmation",
         "source": rule.get("source") if isinstance(rule.get("source"), str) else None,
         "source_url": (
             rule.get("source_url")
@@ -364,14 +367,20 @@ def evaluate_management(
     is_fixture = rule.get("rights_status") == "test_fixture" and rule.get("is_fixture") is True
     item = _empty_item(item_key=item_key, history_status=history_status, rule=rule, is_fixture=is_fixture, component_position=component_position)
 
-    # Only an explicitly reviewed real rule or a clearly marked test fixture is usable.
+    # Source-checked candidate values may be used for the educational MVP while
+    # rights are pending, but every result must retain a visible rights warning.
     fixture_rule = is_fixture and rule.get("review_status") == "reviewed"
     verified_rule = (
         rule.get("rights_status") == "allowed"
         and rule.get("review_status") == "reviewed"
         and rule.get("is_fixture") is False
     )
-    if not (fixture_rule or verified_rule):
+    pending_rights_rule = (
+        rule.get("rights_status") == "pending_confirmation"
+        and rule.get("review_status") == "source_checked_pending_approval"
+        and rule.get("is_fixture") is False
+    )
+    if not (fixture_rule or verified_rule or pending_rights_rule):
         return _finish(
             item,
             timing_status="unknown",

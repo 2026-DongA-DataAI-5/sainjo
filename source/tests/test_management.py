@@ -45,6 +45,7 @@ class ManagementEngineTests(unittest.TestCase):
                 "item_key", "history_status", "timing_status", "labels", "next_mileage",
                 "next_date", "reasons", "missing_fields", "rule_id", "source",
                 "source_url", "checked_date", "questions", "is_fixture", "action",
+                "rights_status", "rights_status_label", "rights_review_pending",
                 "condition_based", "component_position", "interval_km", "interval_months",
                 "first_interval_km", "first_interval_months",
             },
@@ -62,7 +63,7 @@ class ManagementEngineTests(unittest.TestCase):
     def candidate_rule(self, rule_id):
         rules = json.loads(RULES_PATH.read_text(encoding="utf-8"))["rules"]
         rule = copy.deepcopy(next(rule for rule in rules if rule["rule_id"] == rule_id))
-        # This local copy exercises the calculator after review. Production candidates remain gated.
+        # Directly exercise interval arithmetic with an explicitly approved copy.
         rule.update(rights_status="allowed", review_status="reviewed")
         return rule
 
@@ -208,7 +209,7 @@ class ManagementEngineTests(unittest.TestCase):
         self.assertIn("records", result["missing_fields"])
         self.assertEqual(result["action"], "inspection")
 
-    def test_every_unapproved_kia_candidate_stays_non_calculating(self):
+    def test_pending_rights_candidates_calculate_with_visible_status(self):
         rules = json.loads(RULES_PATH.read_text(encoding="utf-8"))["rules"]
         candidates = [rule for rule in rules if rule.get("is_fixture") is False]
         self.assertTrue(candidates)
@@ -216,11 +217,17 @@ class ManagementEngineTests(unittest.TestCase):
         for rule in candidates:
             with self.subTest(rule_id=rule["rule_id"]):
                 result = self.evaluate(records=[], rule=rule)
-                self.assertEqual(result["timing_status"], "unknown")
-                self.assertIsNone(result["next_mileage"])
-                self.assertIsNone(result["next_date"])
-                self.assertIn("rule.rights_status", result["missing_fields"])
-                self.assertIn("rule.review_status", result["missing_fields"])
+                self.assertTrue(result["rights_review_pending"])
+                self.assertEqual(result["rights_status_label"], "사용 권리 확인 중")
+                self.assertNotIn("rule.rights_status", result["missing_fields"])
+                self.assertNotIn("rule.review_status", result["missing_fields"])
+
+    def test_unknown_rights_states_still_block_calculation(self):
+        rule = self.candidate_rule("KIA_DL3_2021_G20_OIL_NORMAL_CANDIDATE")
+        rule.update(rights_status="unknown", review_status="source_checked_pending_approval")
+        result = self.evaluate(records=[], rule=rule)
+        self.assertEqual(result["timing_status"], "unknown")
+        self.assertIn("rule.rights_status", result["missing_fields"])
 
     def test_unknown_work_type_is_not_a_known_history(self):
         record = copy.deepcopy(self.case["input"]["records"][0])
@@ -476,6 +483,7 @@ class ManagementEngineTests(unittest.TestCase):
                         "item_key", "history_status", "timing_status", "labels", "next_mileage",
                         "next_date", "reasons", "missing_fields", "rule_id", "source",
                         "source_url", "checked_date", "questions", "is_fixture", "action",
+                        "rights_status", "rights_status_label", "rights_review_pending",
                         "condition_based", "component_position", "interval_km", "interval_months",
                         "first_interval_km", "first_interval_months",
                     },
@@ -573,6 +581,7 @@ class ManagementEngineTests(unittest.TestCase):
                 "item_key", "history_status", "timing_status", "labels", "next_mileage",
                 "next_date", "reasons", "missing_fields", "rule_id", "source",
                 "source_url", "checked_date", "questions", "is_fixture", "action",
+                "rights_status", "rights_status_label", "rights_review_pending",
                 "condition_based", "component_position", "interval_km", "interval_months",
                 "first_interval_km", "first_interval_months",
             },

@@ -1,5 +1,5 @@
 {
-  "source_notice": "Candidate rules are source-checked, but their reuse rights are not confirmed. They must not be used for live calculations until rights and review are explicitly approved.",
+  "source_notice": "Candidate rules are source-checked and used for prototype calculations while reuse rights remain pending. Every result must display '사용 권리 확인 중'; this status is not permission or Kia endorsement.",
   "rules": [
     {
       "rule_id": "KIA_DL3_2021_G20_OIL_NORMAL_CANDIDATE",

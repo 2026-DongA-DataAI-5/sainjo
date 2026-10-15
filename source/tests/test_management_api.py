@@ -30,31 +30,35 @@ class ManagementApiTests(unittest.TestCase):
         self.assertIsNotNone(oil_item)
         return oil_item, body["meta"]
 
-    def test_default_without_rule_does_not_calculate(self):
+    def test_default_uses_candidate_and_exposes_pending_rights(self):
         item, meta = self.item()
-        self.assertEqual(meta["calculation_mode"], "unavailable")
+        self.assertEqual(meta["calculation_mode"], "candidate_rights_pending")
         self.assertEqual(item["timing_status"], "unknown")
         self.assertIsNone(item["next_mileage"])
+        self.assertIsNone(item["next_date"])
+        self.assertIn("records", item["missing_fields"])
         self.assertFalse(item["is_fixture"])
         self.assertEqual(item["rule_id"], "KIA_DL3_2021_G20_OIL_NORMAL_CANDIDATE")
-        self.assertIn("rule.rights_status", item["missing_fields"])
-        self.assertIn("권한 또는 검토 상태", item["reasons"][0])
+        self.assertTrue(item["rights_review_pending"])
+        self.assertEqual(item["rights_status_label"], "사용 권리 확인 중")
 
-    def test_known_history_is_preserved_without_rule(self):
+    def test_known_history_is_preserved_with_candidate_rule(self):
         self.assertEqual(self.post({**support.VALID_RECORD, "work_type": "inspection"}).status_code, 201)
         item, meta = self.item()
         self.assertEqual(item["history_status"], "recorded")
         self.assertEqual(item["timing_status"], "unknown")
-        self.assertEqual(meta["calculation_mode"], "unavailable")
+        self.assertEqual(meta["calculation_mode"], "candidate_rights_pending")
 
-    def test_candidate_rule_never_calculates_before_rights_approval(self):
+    def test_candidate_rule_calculates_while_rights_pending_and_keeps_status(self):
         self.assertEqual(self.post({**support.VALID_RECORD, "date": "2026-01-01", "mileage": 10000}).status_code, 201)
         item, meta = self.item()
-        self.assertEqual(meta["calculation_mode"], "unavailable")
+        self.assertEqual(meta["calculation_mode"], "candidate_rights_pending")
         self.assertEqual(item["rule_id"], "KIA_DL3_2021_G20_OIL_NORMAL_CANDIDATE")
-        self.assertEqual(item["timing_status"], "unknown")
-        self.assertIsNone(item["next_mileage"])
-        self.assertIsNone(item["next_date"])
+        self.assertTrue(item["rights_review_pending"])
+        self.assertEqual(item["rights_status_label"], "사용 권리 확인 중")
+        self.assertEqual(item["timing_status"], "due")
+        self.assertEqual(item["next_mileage"], 25_000)
+        self.assertEqual(item["next_date"], "2027-01-01")
 
     def test_only_verified_candidate_year_and_conditions_resolve(self):
         vehicle = self.vehicles.rows[0]

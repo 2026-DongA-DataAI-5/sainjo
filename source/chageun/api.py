@@ -577,9 +577,9 @@ def get_management(vehicle_id):
     if vehicle is None:
         return fail("NOT_FOUND", "차량을 찾을 수 없습니다.", 404)
     rules = candidate_rules_for(_vehicle_out(vehicle))
+    calculation_mode = "candidate_rights_pending" if rules else "unavailable"
     if not rules:
         rules = [None]
-    calculation_mode = "unavailable"
     if current_app.config.get("CHAGEUN_ALLOW_TEST_FIXTURE"):
         # 개발자가 명시적으로 허용한 가상 시험 기준만 사용합니다. 실제 제조사 기준이 아닙니다.
         rule = json.loads((Path(__file__).parent / "services/test_rule.json").read_text(encoding="utf-8"))

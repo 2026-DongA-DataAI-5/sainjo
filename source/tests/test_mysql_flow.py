@@ -80,7 +80,9 @@ class MySqlRecordFlowTests(unittest.TestCase):
         self.assertEqual(other.get(self.path + "/management").status_code, 404)
         item = client.get(self.path + "/management").get_json()["data"]["items"][0]
         self.assertEqual(item["history_status"], "recorded")
-        self.assertEqual(item["timing_status"], "unknown")
+        self.assertEqual(item["timing_status"], "partial")
+        self.assertEqual(item["rights_status_label"], "사용 권리 확인 중")
+        self.assertTrue(item["rights_review_pending"])
 
     def test_real_mysql_management_uses_replacement_not_inspection(self):
         self.app.config.update(CHAGEUN_ALLOW_TEST_FIXTURE=True,

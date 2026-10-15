@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#007da8">
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <title>{{ title }} · 차근</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v='20261006-records-v4') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css', v='20261015-rights-status-v1') }}">
   <script src="{{ url_for('static', filename='js/api-client.js', v='20261010-api-v1') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/vehicle-scope.js', v='20261015-management-scope-v2') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/app.js', v='20261015-management-scope-v2') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/vehicle-scope.js', v='20261015-rights-status-v1') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/app.js', v='20261015-rights-status-v1') }}" defer></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/webapp.css', v='20261014-record-edit-v1') }}">
   <script src="{{ url_for('static', filename='js/navigation.js', v='20261007-responsive') }}" defer></script>
 </head>
@@ -40,7 +40,7 @@
         </details>
       </header>
       <main id="main" tabindex="-1">
-        <div class="prototype-notice" role="note"><strong>{{ '관리 안내의 범위' if api_mode == 'live' else '가상 미리보기' }}</strong><span>{% if api_mode == 'live' %}차량과 엔진오일 기록은 로그인한 계정의 서버 자료입니다. 실제 제조사 관리기준은 미확정이며 고장을 진단하지 않습니다. 가상 기준으로 계산한 결과에는 별도 표시가 붙습니다.{% else %}차량·기록은 가상(mock) 응답으로 동작합니다. 이 미리보기는 실제 계정·서버 DB·제조사 기준 계산에 연결되지 않습니다.{% endif %}</span></div>
+        <div class="prototype-notice" role="note"><strong>{{ '관리 안내의 범위' if api_mode == 'live' else '가상 미리보기' }}</strong><span>{% if api_mode == 'live' %}차량과 관리기록은 로그인한 계정의 서버 자료입니다. 2021년형 K5 DL3 후보 기준을 계산에 사용하며, 사용 권리는 확인 중입니다. 기아가 차근의 계산·안내를 승인한 것은 아니며 고장을 진단하지 않습니다. 실제 부품 상태와 정비 필요 여부는 정비소에서 확인하세요.{% else %}차량·기록은 가상(mock) 응답으로 동작합니다. 이 미리보기는 실제 계정·서버 DB·제조사 기준 계산에 연결되지 않습니다.{% endif %}</span></div>
         {% block content %}{% endblock %}
       </main>
       <footer class="page-footer">차근은 관리 이력과 기준을 바탕으로 확인할 항목을 안내합니다. 실제 부품 상태와 필요한 작업은 정비 점검으로 확인합니다.</footer>

@@ -601,7 +601,9 @@
         : allItems;
       showMessage(note, body.meta.calculation_mode === 'test_fixture'
         ? '가상 시험 기준으로 계산한 결과입니다. 실제 제조사 권장 주기가 아닙니다.'
-            : window.ChageunVehicleScope.notice(vehicle));
+        : body.meta.calculation_mode === 'candidate_rights_pending'
+          ? '2021년형 K5 DL3 2.0 가솔린 G2.0 CVVL 후보 기준으로 계산했습니다. 사용 권리 확인 중이며, 기아가 차근의 계산·안내를 승인한 것은 아닙니다. 실제 부품 상태와 정비 필요 여부는 정비소에서 확인하세요.'
+          : window.ChageunVehicleScope.notice(vehicle));
       if (content) content.replaceChildren();
       if (items.length === 0 && content) {
         appendText(content, 'p', '', '현재 차량에 적용할 수 있는 관리 안내가 없습니다. 차량 사양과 관리 기준을 확인해 주세요.');
@@ -613,6 +615,7 @@
           const main = appendText(row, 'div', 'item-main', '');
           const badges = appendText(main, 'div', 'badge-row', '');
           for (const label of item.labels) appendText(badges, 'span', 'badge', label);
+          if (item.rights_review_pending) appendText(badges, 'span', 'badge unknown', item.rights_status_label || '사용 권리 확인 중');
           if (item.is_fixture) appendText(badges, 'span', 'badge unknown', '가상 시험 기준');
           const title = appendText(main, 'h3', '', '');
           const positionLabel = POSITION_LABELS[item.component_position];
