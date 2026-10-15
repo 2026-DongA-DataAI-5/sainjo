@@ -575,6 +575,7 @@
   async function initManagement(suppliedVehicle) {
     const content = document.querySelector('[data-management-content]');
     const questions = document.querySelector('[data-management-questions]');
+    const requestedItemKey = content?.dataset.managementItem || null;
     const note = document.querySelector('[data-demo-data-note]');
     const controls = document.querySelector('[data-management-controls]');
     if (controls) controls.hidden = true;
@@ -594,10 +595,13 @@
         return;
       }
       const body = await api.management.get(vehicle.id);
-      const items = Array.isArray(body.data.items) ? body.data.items : [];
+      const allItems = Array.isArray(body.data.items) ? body.data.items : [];
+      const items = requestedItemKey
+        ? allItems.filter((item) => item.item_key === requestedItemKey)
+        : allItems;
       showMessage(note, body.meta.calculation_mode === 'test_fixture'
         ? '가상 시험 기준으로 계산한 결과입니다. 실제 제조사 권장 주기가 아닙니다.'
-            : '각 관리 기준의 상태를 확인해 안내합니다. 기준이 확정되지 않은 항목은 시점 계산을 보류합니다.');
+            : window.ChageunVehicleScope.notice(vehicle));
       if (content) content.replaceChildren();
       if (items.length === 0 && content) {
         appendText(content, 'p', '', '현재 차량에 적용할 수 있는 관리 안내가 없습니다. 차량 사양과 관리 기준을 확인해 주세요.');
@@ -642,7 +646,12 @@
           }
         }
         if (questions) {
-          for (const question of item.questions) appendText(questions, 'p', '', question);
+          if (!Array.isArray(item.questions) || item.questions.length === 0) continue;
+          const group = appendText(questions, 'article', 'question-section', '');
+          const positionLabel = POSITION_LABELS[item.component_position];
+          const title = `${ITEM_LABELS[item.item_key] || '관리항목'}${positionLabel ? ` · ${positionLabel}` : ''}`;
+          appendText(group, 'h2', '', title);
+          for (const question of item.questions) appendText(group, 'p', '', question);
         }
       }
       document.querySelectorAll('.status-count[data-label]').forEach((counter) => {

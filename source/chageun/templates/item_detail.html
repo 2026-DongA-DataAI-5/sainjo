@@ -3,7 +3,7 @@
 <a class="back-link" href="{{ url_for('pages.dashboard') }}">← 관리 대시보드</a><div class="page-heading"><div><p class="eyebrow">관리항목 상세</p><h1>{{ item.name }}</h1><p class="lede">{{ item.role }}</p></div></div>
 {% if api_mode == 'live' %}
 <p class="prototype-note" data-demo-data-note>관리 안내를 불러오는 중입니다.</p>
-<section class="content-section" data-management-content aria-live="polite"></section>
+<section class="content-section" data-management-content data-management-item="{{ item.key }}" aria-live="polite"></section>
 <section class="content-section"><h2>정비소에 확인할 질문</h2><div data-management-questions></div></section>
 <a class="button primary" href="{{ url_for('pages.maintenance_new') }}">정비 결과 기록</a>
 {% else %}

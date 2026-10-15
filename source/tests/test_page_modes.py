@@ -23,6 +23,12 @@ class PageModeTests(unittest.TestCase):
         form = client.get("/maintenance/new").get_data(as_text=True)
         self.assertIn('value="unknown"', form)
         self.assertNotIn('value="coolant"', form)
+        vehicle_form = client.get("/vehicle").get_data(as_text=True)
+        self.assertIn("국내 판매 2021년형 기아 K5 DL3", vehicle_form)
+        self.assertIn("다른 사양도 차량과 이력은 등록할 수 있지만", vehicle_form)
+        self.assertIn("js/vehicle-scope.js", vehicle_form)
+        detail = client.get("/items/engine-oil").get_data(as_text=True)
+        self.assertIn('data-management-item="engine-oil"', detail)
 
     def test_mock_pages_and_assets_still_render(self):
         client = create_app({"TESTING": True}).test_client()
