@@ -103,6 +103,50 @@ class ManagementApiTests(unittest.TestCase):
         self.assertEqual(by_action["inspection"]["next_mileage"], 35_000)
         self.assertEqual(by_action["replacement"]["next_mileage"], 65_000)
 
+    def test_spark_plug_candidate_uses_165000_km_and_replacement_history_restarts_interval(self):
+        vehicle = self.vehicles.rows[0]
+        vehicle.update(mileage=90_000, reference_date=date.fromisoformat(self.fixture["input"]["as_of_date"]))
+        body = self.client.get(self.management_path).get_json()
+        spark_plugs = next(item for item in body["data"]["items"] if item["item_key"] == "spark-plugs")
+        self.assertEqual(spark_plugs["timing_status"], "upcoming")
+        self.assertEqual(spark_plugs["history_status"], "unknown")
+        self.assertEqual(spark_plugs["next_mileage"], 165_000)
+        self.assertEqual(spark_plugs["action"], "replacement")
+        self.assertEqual(spark_plugs["rights_status_label"], "사용 권리 확인 중")
+
+        response = self.post({
+            **support.VALID_RECORD, "kind": "previous_history", "item_key": "spark-plugs",
+            "work_type": "replacement", "date": "2025-10-01", "mileage": 80_000,
+        })
+        self.assertEqual(response.status_code, 201)
+        body = self.client.get(self.management_path).get_json()
+        spark_plugs = next(item for item in body["data"]["items"] if item["item_key"] == "spark-plugs")
+        self.assertEqual(spark_plugs["history_status"], "recorded")
+        self.assertEqual(spark_plugs["next_mileage"], 245_000)
+        self.assertTrue(spark_plugs["rights_review_pending"])
+
+    def test_item_specific_severe_guidance_uses_selected_manual_condition_codes(self):
+        vehicle = self.vehicles.rows[0]
+        vehicle.update(conditions="severe", severe_condition_codes=[2])
+        body = self.client.get(self.management_path).get_json()
+        items = body["data"]["items"]
+        self.assertFalse(any(item["item_key"] == "spark-plugs" for item in items))
+        air_filter = next(item for item in items if item["item_key"] == "air-filter")
+        self.assertTrue(air_filter["condition_based"])
+        self.assertIsNone(air_filter["next_mileage"])
+        self.assertEqual(air_filter["rights_status_label"], "사용 권리 확인 중")
+        self.assertIn("2", air_filter["reasons"][0])
+
+        vehicle["severe_condition_codes"] = [1]
+        body = self.client.get(self.management_path).get_json()
+        items = body["data"]["items"]
+        self.assertFalse(any(item["item_key"] == "air-filter" for item in items))
+        spark_plugs = next(item for item in items if item["item_key"] == "spark-plugs")
+        self.assertTrue(spark_plugs["condition_based"])
+        self.assertIsNone(spark_plugs["interval_km"])
+        self.assertEqual(spark_plugs["rights_status_label"], "사용 권리 확인 중")
+        self.assertIn("1", spark_plugs["reasons"][0])
+
     def test_only_verified_candidate_year_and_conditions_resolve(self):
         vehicle = self.vehicles.rows[0]
         vehicle["year"] = 2022

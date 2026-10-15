@@ -17,6 +17,7 @@ MIGRATIONS = (
     "005_add_brake_fluid_and_cabin_filter.sql",
     "006_add_coolant.sql",
     "007_add_engine_air_cleaner.sql",
+    "008_add_severe_condition_codes.sql",
 )
 
 
@@ -94,6 +95,9 @@ def main():
             cursor.execute("SELECT in_service_date FROM vehicles WHERE id = %s", (vehicle_id,))
             if cursor.fetchone()[0] is not None:
                 raise AssertionError("Legacy vehicle was not preserved with unknown service date.")
+            cursor.execute("SELECT severe_condition_codes FROM vehicles WHERE id = %s", (vehicle_id,))
+            if cursor.fetchone()[0] != "[]":
+                raise AssertionError("Legacy vehicle should receive an empty detailed severe-condition list.")
             cursor.execute(
                 "SELECT item_key, mileage, result, component_position FROM records WHERE vehicle_id = %s",
                 (vehicle_id,),
@@ -144,7 +148,7 @@ def main():
                 raise AssertionError("Expected two preserved records and nine supported new records.")
 
         connection.commit()
-        print("Migration chain 001 → 002 → 003 → 004 → 005 → 006 → 007 preserves legacy data and supports the current record items.")
+        print("Migration chain 001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 preserves legacy data, stores detailed severe conditions, and supports current record items.")
     except Exception:
         connection.rollback()
         raise

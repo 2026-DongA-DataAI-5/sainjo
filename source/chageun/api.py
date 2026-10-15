@@ -35,7 +35,9 @@ VEHICLE_TEXT_LIMITS = {"manufacturer": 40, "model": 40, "engine": 60, "fuel": 30
 VEHICLE_REQUIRED_TEXT = {"manufacturer", "model"}
 VEHICLE_GENERATIONS = {"DL3", "JF"}
 VEHICLE_CONDITIONS = {"normal", "severe", "unknown"}
-VEHICLE_FIELDS = set(VEHICLE_TEXT_LIMITS) | {"generation", "year", "mileage", "reference_date", "in_service_date", "conditions"}
+VEHICLE_FIELDS = set(VEHICLE_TEXT_LIMITS) | {
+    "generation", "year", "mileage", "reference_date", "in_service_date", "conditions", "severe_condition_codes"
+}
 VEHICLE_YEAR_MIN = 1900
 VEHICLE_YEAR_MAX = 2035
 VEHICLE_MILEAGE_MAX = 1000000
@@ -300,7 +302,38 @@ def _vehicle_values(body):
     else:
         reject("conditions", "normal, severe, unknown 중에서 선택해 주세요.")
 
+    severe_condition_codes = body.get("severe_condition_codes", [])
+    if (
+        isinstance(severe_condition_codes, list)
+        and len(severe_condition_codes) <= 12
+        and all(
+            isinstance(code, int) and not isinstance(code, bool) and 1 <= code <= 12
+            for code in severe_condition_codes
+        )
+        and len(set(severe_condition_codes)) == len(severe_condition_codes)
+    ):
+        values["severe_condition_codes"] = sorted(severe_condition_codes)
+        if conditions in VEHICLE_CONDITIONS and conditions != "severe" and severe_condition_codes:
+            reject("severe_condition_codes", "세부 가혹조건은 운행조건을 가혹조건으로 선택했을 때만 입력할 수 있습니다.")
+    else:
+        reject("severe_condition_codes", "기아 설명서의 가혹조건 번호 1~12를 중복 없이 목록으로 입력해 주세요.")
+
     return values, fields
+
+
+def _stored_severe_condition_codes(value):
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+    if not isinstance(value, (list, tuple)):
+        return []
+    codes = {
+        code for code in value
+        if isinstance(code, int) and not isinstance(code, bool) and 1 <= code <= 12
+    }
+    return sorted(codes)
 
 
 def _vehicle_out(row):
@@ -319,6 +352,7 @@ def _vehicle_out(row):
         "reference_date": reference_date.isoformat() if reference_date is not None else None,
         "in_service_date": in_service_date.isoformat() if in_service_date is not None else None,
         "conditions": row["conditions"],
+        "severe_condition_codes": _stored_severe_condition_codes(row.get("severe_condition_codes", [])),
     }
 
 
@@ -395,6 +429,8 @@ def update_vehicle(vehicle_id):
     merged = _vehicle_out(current)
     merged.pop("id", None)
     merged.update(body)
+    if "conditions" in body and body.get("conditions") != "severe" and "severe_condition_codes" not in body:
+        merged["severe_condition_codes"] = []
     values, fields = _vehicle_values(merged)
     if fields:
         return fail("VALIDATION_ERROR", "차량 정보를 확인해 주세요", 400, fields)

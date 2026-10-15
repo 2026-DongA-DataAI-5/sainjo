@@ -156,6 +156,9 @@
       reference_date: api.convert.date(value('reference_date')),
       in_service_date: api.convert.date(value('in_service_date')),
       conditions: form.querySelector('input[name="conditions"]:checked')?.value || 'unknown',
+      severe_condition_codes: form.querySelector('input[name="conditions"]:checked')?.value === 'severe'
+        ? [...form.querySelectorAll('input[name="severe_condition_codes"]:checked')].map((field) => Number(field.value))
+        : [],
     };
   }
 
@@ -168,15 +171,36 @@
     }
     const condition = form.querySelector(`input[name="conditions"][value="${vehicle.conditions}"]`);
     if (condition) condition.checked = true;
+    const severeCodes = Array.isArray(vehicle.severe_condition_codes) ? vehicle.severe_condition_codes.map(String) : [];
+    form.querySelectorAll('input[name="severe_condition_codes"]').forEach((field) => {
+      field.checked = severeCodes.includes(field.value);
+    });
+  }
+
+  function syncSevereConditionControls(form) {
+    const selected = form.querySelector('input[name="conditions"]:checked')?.value;
+    const details = form.querySelector('[data-severe-conditions]');
+    if (!details) return;
+    details.hidden = selected !== 'severe';
+    if (selected !== 'severe') {
+      details.querySelectorAll('input[name="severe_condition_codes"]').forEach((field) => {
+        field.checked = false;
+      });
+    }
   }
 
   async function initVehicleForm(form) {
     const status = form.querySelector('.form-message');
+    form.querySelectorAll('input[name="conditions"]').forEach((field) => {
+      field.addEventListener('change', () => syncSevereConditionControls(form));
+    });
+    syncSevereConditionControls(form);
     lockForm(form, true);
     showMessage(status, '차량 정보를 불러오는 중입니다.');
     try {
       const vehicle = await loadVehicle();
       if (vehicle) fillVehicleForm(form, vehicle);
+      syncSevereConditionControls(form);
       if (vehicle && api.mode === 'live') {
         form.dataset.existingVehicle = 'true';
         form.querySelectorAll('input, select').forEach((field) => {
@@ -620,13 +644,13 @@
           const title = appendText(main, 'h3', '', '');
           const positionLabel = POSITION_LABELS[item.component_position];
           const itemActions = new Set(items.filter((candidate) => candidate.item_key === item.item_key).map((candidate) => candidate.action));
-          const actionLabel = itemActions.size > 1 ? ` · ${ACTION_LABELS[item.action] || '관리'}` : '';
+          const actionLabel = itemActions.size > 1 || item.condition_based ? ` · ${ACTION_LABELS[item.action] || '관리'}` : '';
           const titleText = `${ITEM_LABELS[item.item_key] || '관리항목'}${actionLabel}${positionLabel ? ` · ${positionLabel}` : ''}`;
           const link = appendText(title, 'a', '', titleText);
           link.href = appPath(`/items/${encodeURIComponent(item.item_key)}`);
           for (const reason of item.reasons) appendText(main, 'p', '', reason);
-          if (item.timing_status !== 'unknown' && item.timing_status !== 'unsupported' && item.action) {
-            const actionText = item.condition_based ? '안내 방식: 부품 상태 점검 후 필요 시 정비' : `안내 방식: 정기 ${ACTION_LABELS[item.action]}`;
+          if (item.condition_based || (item.timing_status !== 'unknown' && item.timing_status !== 'unsupported' && item.action)) {
+            const actionText = item.condition_based ? '안내 방식: 세부 가혹조건에 해당할 때 상태를 수시 점검하고 필요 시 정비' : `안내 방식: 정기 ${ACTION_LABELS[item.action]}`;
             appendText(main, 'p', 'muted', actionText);
           }
           appendText(main, 'p', 'muted', `거리 기준: ${formatMileage(item.next_mileage)} · 기간 기준: ${item.next_date || '미확인'}`);
@@ -655,7 +679,7 @@
           const group = appendText(questions, 'article', 'question-section', '');
           const positionLabel = POSITION_LABELS[item.component_position];
           const itemActions = new Set(items.filter((candidate) => candidate.item_key === item.item_key).map((candidate) => candidate.action));
-          const actionLabel = itemActions.size > 1 ? ` · ${ACTION_LABELS[item.action] || '관리'}` : '';
+          const actionLabel = itemActions.size > 1 || item.condition_based ? ` · ${ACTION_LABELS[item.action] || '관리'}` : '';
           const title = `${ITEM_LABELS[item.item_key] || '관리항목'}${actionLabel}${positionLabel ? ` · ${positionLabel}` : ''}`;
           appendText(group, 'h2', '', title);
           for (const question of item.questions) appendText(group, 'p', '', question);

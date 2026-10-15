@@ -103,7 +103,9 @@
       "rule_id": "KIA_DL3_2021_G20_SPARK_PLUG_SEVERE_CANDIDATE",
       "item_key": "spark-plugs",
       "action": "inspection",
-      "condition_based": true
+      "condition_based": true,
+      "severe_condition_codes": [1, 3, 7, 9],
+      "condition_based_reason": "기아 점검표의 가혹조건 1·3·7·9번 운행상황에서는 점화플러그를 상태에 따라 수시 점검합니다. 별도 고정 교환주기는 적용하지 않습니다."
     },
     {
       "applicability": {
@@ -428,6 +430,31 @@
       },
       "official_engine_name": "스마트스트림 G2.0 CVVL",
       "source": "기아 2021년형 K5 DL3 취급설명서 통상조건 - 에어클리너 필터 교환",
+      "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
+      "checked_date": "2026-10-15",
+      "rights_status": "pending_confirmation",
+      "review_status": "source_checked_pending_approval",
+      "is_fixture": false
+    },
+    {
+      "rule_id": "KIA_DL3_2021_G20_AIR_FILTER_SEVERE_CANDIDATE",
+      "item_key": "air-filter",
+      "action": "inspection",
+      "conditions": "severe",
+      "condition_based": true,
+      "severe_condition_codes": [2, 5],
+      "condition_based_reason": "기아 점검표의 가혹조건 2·5번 운행상황에서는 엔진 에어클리너 필터를 상태에 따라 수시 점검하고 필요하면 교환합니다. 별도 고정 주기는 적용하지 않습니다.",
+      "applicability": {
+        "manufacturer": "기아",
+        "model": "K5",
+        "generation": "DL3",
+        "years": [2021],
+        "engine": "G2.0 CVVL",
+        "fuel": "가솔린",
+        "transmission": "자동"
+      },
+      "official_engine_name": "스마트스트림 G2.0 CVVL",
+      "source": "기아 2021년형 K5 DL3 취급설명서 가혹조건 - 에어클리너 필터",
       "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
       "checked_date": "2026-10-15",
       "rights_status": "pending_confirmation",

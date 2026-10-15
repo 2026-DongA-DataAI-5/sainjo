@@ -52,8 +52,27 @@ def candidate_rules_for(vehicle: dict[str, Any]) -> list[dict[str, Any]]:
             for field in _APPLICABILITY_FIELDS
         ):
             continue
-        if rule.get("conditions") not in ("any", vehicle.get("conditions")):
+        rule_conditions = rule.get("conditions")
+        if rule_conditions not in ("any", vehicle.get("conditions")):
             continue
+        if rule_conditions == "severe" and "severe_condition_codes" in rule:
+            required_codes = rule.get("severe_condition_codes")
+            selected_codes = vehicle.get("severe_condition_codes")
+            if (
+                not isinstance(required_codes, list)
+                or not required_codes
+                or any(
+                    not isinstance(code, int) or isinstance(code, bool) or not 1 <= code <= 12
+                    for code in required_codes
+                )
+            ):
+                continue
+            selected_codes = {
+                code for code in selected_codes
+                if isinstance(code, int) and not isinstance(code, bool) and 1 <= code <= 12
+            } if isinstance(selected_codes, (list, tuple, set)) else set()
+            if not selected_codes.intersection(required_codes):
+                continue
         matches.append(rule)
 
     return matches

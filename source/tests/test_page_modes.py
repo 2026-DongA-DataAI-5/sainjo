@@ -16,7 +16,7 @@ class PageModeTests(unittest.TestCase):
 
     def test_live_pages_use_live_mode_and_do_not_show_sample_timelines(self):
         client = create_app({"TESTING": True, "CHAGEUN_SERVER_MODE": True, "SECRET_KEY": "page-test-only"}).test_client()
-        for path in ("/vehicle", "/history/new", "/maintenance/new", "/timeline", "/dashboard", "/items/engine-oil", "/items/air-filter", "/questions"):
+        for path in ("/vehicle", "/history/new", "/maintenance/new", "/timeline", "/dashboard", "/items/engine-oil", "/items/air-filter", "/items/spark-plugs", "/questions"):
             with self.subTest(path=path):
                 response = client.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -35,6 +35,7 @@ class PageModeTests(unittest.TestCase):
         self.assertIn('value="air-filter"', form)
         self.assertIn('value="brake-fluid"', form)
         self.assertIn('value="cabin-air-filter"', form)
+        self.assertIn('value="spark-plugs"', form)
         vehicle_form = client.get("/vehicle").get_data(as_text=True)
         self.assertIn("국내 판매 2021년형 기아 K5 DL3", vehicle_form)
         self.assertIn("다른 사양도 차량과 이력은 등록할 수 있지만", vehicle_form)
@@ -44,6 +45,17 @@ class PageModeTests(unittest.TestCase):
         for item_key in ("air-filter", "brake-fluid", "cabin-air-filter", "coolant"):
             with self.subTest(item_key=item_key):
                 self.assertEqual(client.get(f"/items/{item_key}").status_code, 200)
+        self.assertIn('data-severe-conditions', vehicle_form)
+        self.assertIn('name="severe_condition_codes"', vehicle_form)
+        spark_plugs = client.get("/items/spark-plugs").get_data(as_text=True)
+        self.assertIn('data-management-item="spark-plugs"', spark_plugs)
+
+    def test_mock_spark_plug_example_shows_candidate_schedule_and_pending_rights(self):
+        client = create_app({"TESTING": True}).test_client()
+        detail = client.get("/items/spark-plugs").get_data(as_text=True)
+        self.assertIn("165,000km", detail)
+        self.assertIn("사용 권리 확인 중", detail)
+        self.assertIn("가상", detail)
 
     def test_mock_pages_and_assets_still_render(self):
         client = create_app({"TESTING": True}).test_client()

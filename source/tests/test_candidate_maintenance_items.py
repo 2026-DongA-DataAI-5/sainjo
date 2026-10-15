@@ -27,14 +27,16 @@ class CandidateMaintenanceItemTests(unittest.TestCase):
         return {
             rule["item_key"]: rule
             for rule in candidate_rules_for(vehicle)
-            if rule["item_key"] in {"brake-fluid", "cabin-air-filter", "coolant"}
+            if rule["item_key"] in {"brake-fluid", "cabin-air-filter", "coolant", "spark-plugs"}
         }
 
-    def test_normal_candidates_include_brake_fluid_cabin_filter_and_coolant(self):
+    def test_normal_candidates_include_brake_fluid_cabin_filter_coolant_and_spark_plugs(self):
         rules = self.selected_rules()
-        self.assertEqual(set(rules), {"brake-fluid", "cabin-air-filter", "coolant"})
+        self.assertEqual(set(rules), {"brake-fluid", "cabin-air-filter", "coolant", "spark-plugs"})
         self.assertEqual(rules["brake-fluid"]["interval_km"], 50_000)
         self.assertEqual(rules["cabin-air-filter"]["interval_km"], 15_000)
+        self.assertEqual(rules["spark-plugs"]["first_interval_km"], 165_000)
+        self.assertEqual(rules["spark-plugs"]["interval_km"], 165_000)
         self.assertEqual(rules["coolant"]["first_interval_km"], 200_000)
         self.assertEqual(rules["coolant"]["first_interval_months"], 120)
         self.assertEqual(rules["coolant"]["interval_km"], 40_000)
@@ -199,6 +201,17 @@ class CandidateMaintenanceItemTests(unittest.TestCase):
     def test_engine_air_cleaner_candidates_do_not_apply_to_severe_conditions(self):
         severe_vehicle = {**VEHICLE, "conditions": "severe"}
         self.assertFalse(any(rule["item_key"] == "air-filter" for rule in candidate_rules_for(severe_vehicle)))
+
+    def test_item_specific_severe_rules_require_matching_manual_condition_codes(self):
+        dusty_vehicle = {**VEHICLE, "conditions": "severe", "severe_condition_codes": [2]}
+        dusty_rules = candidate_rules_for(dusty_vehicle)
+        self.assertTrue(any(rule["item_key"] == "air-filter" for rule in dusty_rules))
+        self.assertFalse(any(rule["item_key"] == "spark-plugs" for rule in dusty_rules))
+
+        short_trip_vehicle = {**VEHICLE, "conditions": "severe", "severe_condition_codes": [1]}
+        short_trip_rules = candidate_rules_for(short_trip_vehicle)
+        self.assertTrue(any(rule["item_key"] == "spark-plugs" for rule in short_trip_rules))
+        self.assertFalse(any(rule["item_key"] == "air-filter" for rule in short_trip_rules))
 
     def test_k5_candidates_do_not_apply_to_other_years_or_generations(self):
         for change in ({"year": 2022}, {"generation": "JF"}):

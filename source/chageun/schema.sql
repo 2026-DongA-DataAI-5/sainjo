@@ -9,7 +9,7 @@
 -- 날짜·거리가 없는 값은 NULL입니다. 0km와 NULL은 다른 값입니다.
 -- 자료 확인일(checked_date)은 증빙 자동 검증 결과가 아닙니다.
 -- 기존 DB는 migrations/001_vehicle_date_and_service_items.sql부터 번호 순서대로 한 번 적용하세요.
--- 기존 DB 적용 순서: migrations/001 → 002 → 003 → 004 → 005 → 006 → 007
+-- 기존 DB 적용 순서: migrations/001 → 002 → 003 → 004 → 005 → 006 → 007 → 008
 
 CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
     reference_date DATE NULL,
     in_service_date DATE NULL,
     conditions VARCHAR(10) NOT NULL DEFAULT 'unknown',
+    severe_condition_codes VARCHAR(48) NOT NULL DEFAULT '[]',
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     PRIMARY KEY (id),
     UNIQUE KEY uq_vehicles_owner (owner_id),

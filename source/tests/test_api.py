@@ -98,6 +98,7 @@ VEHICLE_FIELD_KEYS = {
     "reference_date",
     "in_service_date",
     "conditions",
+    "severe_condition_codes",
 }
 VALID_VEHICLE = {
     "manufacturer": "현대",
@@ -111,6 +112,7 @@ VALID_VEHICLE = {
     "reference_date": "2026-10-01",
     "in_service_date": None,
     "conditions": "normal",
+    "severe_condition_codes": [],
 }
 
 
@@ -526,6 +528,32 @@ class VehicleApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.get_json()["data"]["mileage"])
         self.assertEqual(response.get_json()["data"]["reference_date"], "2026-01-31")
+
+    def test_severe_condition_codes_are_saved_and_cleared_when_condition_becomes_normal(self):
+        response = self.create(self.client_a, {
+            "manufacturer": "기아", "model": "K5", "conditions": "severe",
+            "severe_condition_codes": [9, 1],
+        })
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["data"]["severe_condition_codes"], [1, 9])
+        updated = self.patch_vehicle(self.client_a, 1, {"conditions": "normal"})
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.get_json()["data"]["severe_condition_codes"], [])
+
+    def test_severe_condition_codes_require_unique_in_range_integer_list_and_severe_mode(self):
+        for codes in ([0], [13], [1, 1], "1,3", [True], None):
+            with self.subTest(codes=codes):
+                response = self.create(self.client_a, {
+                    "manufacturer": "기아", "model": "K5", "conditions": "severe",
+                    "severe_condition_codes": codes,
+                })
+                self.assert_error(response, 400, "VALIDATION_ERROR")
+        response = self.create(self.client_a, {
+            "manufacturer": "기아", "model": "K5", "conditions": "normal",
+            "severe_condition_codes": [1],
+        })
+        self.assert_error(response, 400, "VALIDATION_ERROR")
+        self.assertEqual(self.vehicles.rows, [])
 
     def test_patch_vehicle_requires_csrf_and_preserves_values(self):
         self.create(self.client_a)

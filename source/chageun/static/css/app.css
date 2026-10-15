@@ -518,6 +518,29 @@ legend {
   gap:8px;
   align-items:center;
 }
+.condition-check-grid {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px 16px;
+}
+.condition-choice {
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  color:var(--text);
+  font-size:13px;
+  line-height:1.5;
+}
+.condition-choice input {
+  flex:0 0 auto;
+  width:17px;
+  height:17px;
+  margin-top:1px;
+  accent-color:var(--accent);
+}
+fieldset[hidden] {
+  display:none;
+}
 .choice input,.question-choice input {
   accent-color:var(--accent);
   width:17px;
@@ -729,6 +752,9 @@ legend {
   }
 }
 @media(max-width:768px) {
+  .condition-check-grid {
+    grid-template-columns:1fr;
+  }
   .app-shell {
     display:block;
   }

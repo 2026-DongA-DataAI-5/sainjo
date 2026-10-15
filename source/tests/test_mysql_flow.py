@@ -150,3 +150,16 @@ class MySqlRecordFlowTests(unittest.TestCase):
         self.assertEqual(cleared.status_code, 200)
         self.assertIsNone(client.get(self.path).get_json()["data"]["mileage"])
         self.assertIsNone(client.get(self.path).get_json()["data"]["reference_date"])
+
+    def test_real_mysql_persists_and_clears_detailed_severe_condition_codes(self):
+        client = self.clients[0]
+        updated = self.write_method(client, "patch", self.path, {
+            "conditions": "severe", "severe_condition_codes": [9, 1],
+        })
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.get_json()["data"]["severe_condition_codes"], [1, 9])
+        self.assertEqual(client.get(self.path).get_json()["data"]["severe_condition_codes"], [1, 9])
+
+        normal = self.write_method(client, "patch", self.path, {"conditions": "normal"})
+        self.assertEqual(normal.status_code, 200)
+        self.assertEqual(client.get(self.path).get_json()["data"]["severe_condition_codes"], [])
