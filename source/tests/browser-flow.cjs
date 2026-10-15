@@ -151,6 +151,7 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     assert.equal(await page.locator('#model').isDisabled(), false);
     assert.equal(await page.locator('#mileage').isDisabled(), false);
     assert.equal(await page.locator('#reference-date').isDisabled(), false);
+    const patchesBeforeVehicleUpdate = vehiclePatches;
     await page.locator('#model-year').fill('2022');
     await page.locator('#mileage').fill('91000');
     const today = new Intl.DateTimeFormat('en-CA', {
@@ -158,7 +159,7 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     await page.locator('#reference-date').fill(today);
     await page.locator('#vehicle-form button[type=submit]').click();
     await page.waitForURL('**/dashboard');
-    assert.equal(vehiclePatches, 1);
+    assert.equal(vehiclePatches - patchesBeforeVehicleUpdate, 1);
     await page.goto(`${base}/vehicle`);
     await page.locator('[data-save-status]').filter({ hasText: '정보 수정' }).waitFor();
     assert.equal(await page.locator('#model-year').inputValue(), '2022');
