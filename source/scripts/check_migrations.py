@@ -18,6 +18,7 @@ MIGRATIONS = (
     "006_add_coolant.sql",
     "007_add_engine_air_cleaner.sql",
     "008_add_severe_condition_codes.sql",
+    "009_add_question_selections.sql",
 )
 
 
@@ -147,8 +148,14 @@ def main():
             if cursor.fetchone()[0] != 11:
                 raise AssertionError("Expected two preserved records and nine supported new records.")
 
+            question_key = "a" * 64
+            cursor.execute("INSERT INTO question_selections (vehicle_id, question_key) VALUES (%s, %s)", (vehicle_id, question_key))
+            cursor.execute("SELECT question_key FROM question_selections WHERE vehicle_id = %s", (vehicle_id,))
+            if cursor.fetchone() != (question_key,):
+                raise AssertionError("Migrated database did not preserve selected question key.")
+
         connection.commit()
-        print("Migration chain 001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 preserves legacy data, stores detailed severe conditions, and supports current record items.")
+        print("Migration chain 001 → 009 preserves legacy data, stores detailed severe conditions, and supports record items and account-scoped question selections.")
     except Exception:
         connection.rollback()
         raise

@@ -596,6 +596,59 @@
     }
   }
 
+  async function bindSavedQuestionChoices(container, vehicleId) {
+    const choices = [...container.querySelectorAll('[data-question-key]')];
+    const clearButton = document.querySelector('[data-question-clear]');
+    const message = document.querySelector('[data-question-message]');
+    const lock = (busy) => {
+      choices.forEach((choice) => { choice.disabled = busy; });
+      if (clearButton) clearButton.disabled = busy;
+    };
+    const restore = async () => {
+      const response = await api.questions.list(vehicleId);
+      const saved = new Set(response.data.selected_question_keys);
+      choices.forEach((choice) => { choice.checked = saved.has(choice.dataset.questionKey); });
+    };
+    async function save(action, successText) {
+      lock(true);
+      showMessage(message, '질문 선택을 저장하는 중입니다.');
+      let recovered = true;
+      try {
+        await action();
+        showMessage(message, successText);
+      } catch (error) {
+        if (error.status === 401) redirectToLogin();
+        // 응답을 잃었어도 저장됐을 수 있으므로 서버에서 다시 확인합니다.
+        try { await restore(); }
+        catch { recovered = false; }
+        showMessage(message, recovered
+          ? `저장 요청을 완료하지 못해 서버의 현재 선택을 다시 불러왔습니다. ${errorText(error)}`
+          : '질문 선택의 저장 상태를 확인하지 못했습니다. 새로고침한 뒤 다시 확인해 주세요.');
+      } finally {
+        lock(!recovered);
+      }
+    }
+    lock(true);
+    try {
+      await restore();
+      lock(false);
+    } catch (error) {
+      if (error.status === 401) redirectToLogin();
+      showMessage(message, '저장한 질문 선택을 불러오지 못했습니다. 새로고침한 뒤 다시 확인해 주세요.');
+      return;
+    }
+    choices.forEach((choice) => {
+      choice.addEventListener('change', () => save(
+        () => api.questions.select(vehicleId, choice.dataset.questionKey, choice.checked),
+        '질문 선택을 내 차량에 저장했습니다. 정비 결과는 별도로 기록해 주세요.',
+      ));
+    });
+    if (clearButton) clearButton.addEventListener('click', () => save(async () => {
+      await api.questions.clear(vehicleId);
+      choices.forEach((choice) => { choice.checked = false; });
+    }, '질문 선택을 초기화했습니다. 정비 기록은 변경하지 않았습니다.'));
+  }
+
   async function initManagement(suppliedVehicle) {
     const content = document.querySelector('[data-management-content]');
     const questions = document.querySelector('[data-management-questions]');
@@ -681,14 +734,33 @@
         if (questions) {
           if (!Array.isArray(item.questions) || item.questions.length === 0) continue;
           const group = appendText(questions, 'article', 'question-section', '');
+          group.dataset.questionGroup = `${item.item_key}:${item.component_position || 'all'}:${item.action || 'unknown'}`;
           const positionLabel = POSITION_LABELS[item.component_position];
           const itemActions = new Set(items.filter((candidate) => candidate.item_key === item.item_key).map((candidate) => candidate.action));
           const actionLabel = itemActions.size > 1 || item.condition_based ? ` · ${ACTION_LABELS[item.action] || '관리'}` : '';
           const title = `${ITEM_LABELS[item.item_key] || '관리항목'}${actionLabel}${positionLabel ? ` · ${positionLabel}` : ''}`;
           appendText(group, 'h2', '', title);
-          for (const question of item.questions) appendText(group, 'p', '', question);
+          item.questions.forEach((question, index) => {
+            const key = item.question_keys?.[index];
+            if (typeof key !== 'string' || !/^[a-f0-9]{64}$/.test(key)) {
+              appendText(group, 'p', '', question);
+              return;
+            }
+            const label = appendText(group, 'label', 'question-choice', '');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.dataset.questionKey = key;
+            checkbox.disabled = true;
+            label.append(checkbox);
+            appendText(label, 'span', '', question);
+          });
+          const params = new URLSearchParams({ item: item.item_key });
+          if (item.component_position) params.set('position', item.component_position);
+          const recordLink = appendText(group, 'a', 'text-link', '이 항목의 정비 결과 기록 →');
+          recordLink.href = `${appPath('/maintenance/new')}?${params}`;
         }
       }
+      if (questions) await bindSavedQuestionChoices(questions, vehicle.id);
       document.querySelectorAll('.status-count[data-label]').forEach((counter) => {
         const count = items.filter((item) => Array.isArray(item.labels) && item.labels.includes(counter.dataset.label)).length;
         counter.replaceChildren(document.createTextNode(String(count)));
@@ -707,6 +779,21 @@
   // 정비 결과·이력 화면: 차량이 없으면 먼저 등록하라고 안내합니다.
   const recordForm = document.querySelector('#record-form');
   if (recordForm) {
+    const params = new URLSearchParams(window.location.search);
+    const itemField = recordForm.elements.namedItem('item');
+    const item = params.get('item');
+    if (item && [...itemField.options].some((option) => option.value === item)) {
+      itemField.value = item;
+      const positionField = recordForm.elements.namedItem('component_position');
+      const position = params.get('position');
+      if (['brake-pads-discs', 'ball-joint', 'lower-arm'].includes(item)
+          && position && [...positionField.options].some((option) => option.value === position)) positionField.value = position;
+      recordForm.elements.namedItem('work_type').value = 'unknown';
+      const note = document.createElement('p');
+      note.className = 'field-note';
+      note.textContent = '질문에서 선택한 항목과 위치를 불러왔습니다. 실제 작업 유형·날짜·주행거리는 확인한 내용으로 직접 입력해 주세요.';
+      recordForm.prepend(note);
+    }
     guardedSubmit(recordForm, async () => {
       const vehicle = await loadVehicle();
       if (!vehicle) {
@@ -777,10 +864,10 @@
   const mileageReferenceDate = document.querySelector('#reference-date');
   if (mileageReferenceDate) mileageReferenceDate.max = localDate;
 
-  // 질문 체크는 아직 이 브라우저에만 저장합니다. 서버 저장은 후속 범위입니다.
+  // 가상 화면의 질문 선택만 브라우저에 저장합니다. live는 차량별 서버 저장을 사용합니다.
   const questionMessage = document.querySelector('[data-question-message]');
   const questionCheckboxes = document.querySelectorAll('[data-question-key]');
-  if (questionCheckboxes.length) {
+  if (api.mode !== 'live' && questionCheckboxes.length) {
     const selectedQuestions = new Set(readSelectedQuestions());
     questionCheckboxes.forEach((checkbox) => {
       checkbox.checked = selectedQuestions.has(checkbox.dataset.questionKey);

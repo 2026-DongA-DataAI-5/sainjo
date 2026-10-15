@@ -21,12 +21,14 @@ fs.mkdirSync(screenshotDir, { recursive: true });
   let recordPatches = 0;
   let recordDeletes = 0;
   let vehiclePatches = 0;
+  let questionWrites = 0;
   let unsupportedCalls = 0;
   page.on('request', request => {
     if (request.method() === 'POST' && /\/records$/.test(request.url())) recordPosts += 1;
     if (request.method() === 'PATCH' && /\/api\/records\/\d+$/.test(request.url())) recordPatches += 1;
     else if (request.method() === 'DELETE' && /\/api\/records\/\d+$/.test(request.url())) recordDeletes += 1;
     else if (request.method() === 'PATCH' && /\/api\/vehicles\/\d+$/.test(request.url())) vehiclePatches += 1;
+    else if (['PATCH', 'DELETE'].includes(request.method()) && /\/question-selections$/.test(request.url())) questionWrites += 1;
     else if (['PATCH', 'DELETE'].includes(request.method())) unsupportedCalls += 1;
   });
   const checks = [];
@@ -262,6 +264,63 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     await page.locator('[data-management-questions] article h2').first().waitFor();
     assert.ok(await page.locator('[data-management-questions] article h2').count() > 1);
     check('detail and question pages use server management');
+
+    const firstQuestion = page.locator('[data-management-questions] [data-question-key]').first();
+    await page.locator('[data-question-clear]:enabled').waitFor();
+    const selectedKey = await firstQuestion.getAttribute('data-question-key');
+    const savedSelection = page.waitForResponse(response => response.url().endsWith('/question-selections') && response.request().method() === 'PATCH');
+    await firstQuestion.check();
+    assert.equal((await savedSelection).status(), 200);
+    await page.locator('[data-question-message]').filter({ hasText: '질문 선택을 내 차량에 저장했습니다' }).waitFor();
+    await page.reload();
+    await page.locator('[data-question-clear]:enabled').waitFor();
+    const savedQuestion = page.locator(`[data-question-key="${selectedKey}"]`);
+    assert.equal(await savedQuestion.isChecked(), true);
+    await page.screenshot({ path: path.join(screenshotDir, 'questions-live-390.png') });
+    await page.setViewportSize({ width: 320, height: 844 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1));
+    await page.screenshot({ path: path.join(screenshotDir, 'questions-live-320.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
+    check('selected mechanic question persists after reload');
+
+    await page.route('**/question-selections', async route => {
+      if (route.request().method() === 'PATCH') await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: '시험용 저장 실패' } }) });
+      else await route.continue();
+    });
+    await savedQuestion.uncheck();
+    await page.locator('[data-question-message]').filter({ hasText: '서버의 현재 선택을 다시 불러왔습니다' }).waitFor();
+    assert.equal(await savedQuestion.isChecked(), true);
+    await page.unroute('**/question-selections');
+    check('failed question save restores server state without reporting success');
+
+    const ballJointQuestions = page.locator('[data-question-group^="ball-joint:front_right:"]');
+    await ballJointQuestions.getByRole('link', { name: '이 항목의 정비 결과 기록 →' }).click();
+    await page.waitForURL('**/maintenance/new?*');
+    assert.equal(await page.locator('#item').inputValue(), 'ball-joint');
+    assert.equal(await page.locator('#component-position').inputValue(), 'front_right');
+    assert.equal(await page.locator('#work-type').inputValue(), 'unknown');
+    assert.equal(await page.locator('#work-date').inputValue(), '');
+    check('question links prefill only the component and position, not completed work');
+    await page.goto(`${base}/maintenance/new?item=engine-oil&position=front_right`);
+    assert.equal(await page.locator('#component-position').inputValue(), 'unknown');
+    await page.goto(`${base}/maintenance/new?item=%3Cscript%3E&position=invalid`);
+    assert.equal(await page.locator('#item').inputValue(), 'engine-oil');
+    assert.equal(await page.locator('#component-position').inputValue(), 'unknown');
+    assert.equal(await page.locator('#work-type').inputValue(), 'unknown');
+    check('record prefill ignores invalid items and unrelated component positions');
+
+    await page.goto(`${base}/dashboard`);
+    await page.locator('[data-logout]').click();
+    await page.waitForURL('**/login');
+    await login(username);
+    await page.goto(`${base}/questions`);
+    await page.locator('[data-question-clear]:enabled').waitFor();
+    assert.equal(await savedQuestion.isChecked(), true);
+    await page.locator('[data-question-clear]').click();
+    await page.locator('[data-question-message]').filter({ hasText: '질문 선택을 초기화했습니다' }).waitFor();
+    assert.equal(await savedQuestion.isChecked(), false);
+    assert.equal(questionWrites, 3);
+    check('question selection survives relogin and can be cleared independently');
 
     await page.goto(`${base}/maintenance/new`);
     await page.locator('#item').selectOption('lower-arm');

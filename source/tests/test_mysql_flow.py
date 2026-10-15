@@ -151,6 +151,54 @@ class MySqlRecordFlowTests(unittest.TestCase):
         self.assertIsNone(client.get(self.path).get_json()["data"]["mileage"])
         self.assertIsNone(client.get(self.path).get_json()["data"]["reference_date"])
 
+    def test_real_mysql_question_selections_persist_and_stay_account_scoped(self):
+        client, other = self.clients
+        question_path = self.path + "/question-selections"
+        management = client.get(self.path + "/management").get_json()["data"]["items"]
+        key = management[0]["question_keys"][0]
+        self.assertEqual(len(key), 64)
+        positions = [item["question_keys"][0] for item in management if item["item_key"] == "ball-joint"]
+        self.assertEqual(len(positions), 4)
+        self.assertEqual(len(set(positions)), 4)
+        self.assertEqual(client.get(self.path + "/management").get_json()["data"]["items"][0]["question_keys"][0], key)
+        for _ in range(2):
+            self.assertEqual(self.write_method(client, "patch", question_path,
+                                              {"question_key": key, "selected": True}).status_code, 200)
+        self.assertEqual(client.get(question_path).get_json()["data"]["selected_question_keys"], [key])
+        self.assertEqual(other.get(question_path).status_code, 404)
+        self.assertEqual(self.write_method(other, "delete", question_path).status_code, 404)
+
+        second = self.app.test_client()
+        self.assertEqual(self.write(second, "/api/auth/login", {
+            "username": self.usernames[0], "password": "test-only-password",
+        }).status_code, 200)
+        self.assertEqual(second.get(question_path).get_json()["data"]["selected_question_keys"], [key])
+        vehicle = client.get(self.path).get_json()["data"]
+        vehicle.pop("id")
+        other_vehicle = self.write(other, "/api/vehicles", vehicle).get_json()["data"]["id"]
+        self.assertEqual(other.get(f"/api/vehicles/{other_vehicle}/question-selections").get_json()["data"]["selected_question_keys"], [])
+        self.assertEqual(self.write_method(second, "delete", question_path).status_code, 200)
+        self.assertEqual(client.get(question_path).get_json()["data"]["selected_question_keys"], [])
+        self.assertEqual(client.get(self.path + "/records").get_json()["data"], [])
+        created = self.write(client, self.path + "/records", self.replacement()).get_json()["data"]["id"]
+        changed = client.get(self.path + "/management").get_json()["data"]["items"]
+        self.assertNotEqual(changed[0]["question_keys"][0], key)
+        self.assertEqual(self.write_method(client, "delete", f"/api/records/{created}").status_code, 200)
+        conn = support._mysql_test_connect(self.config)
+        try:
+            with conn.cursor() as cursor:
+                cursor.executemany("INSERT INTO question_selections (vehicle_id, question_key) VALUES (%s, %s)",
+                                   [(self.vehicle_id, f"{number:064x}") for number in range(200)])
+            conn.commit()
+        finally:
+            conn.close()
+        self.assertEqual(self.write_method(client, "patch", question_path,
+                                          {"question_key": "f" * 64, "selected": True}).status_code, 409)
+        self.assertEqual(self.write_method(client, "patch", question_path,
+                                          {"question_key": "0" * 64, "selected": True}).status_code, 200)
+        self.assertEqual(len(client.get(question_path).get_json()["data"]["selected_question_keys"]), 200)
+        self.assertEqual(self.write_method(client, "delete", question_path).status_code, 200)
+
     def test_real_mysql_persists_and_clears_detailed_severe_condition_codes(self):
         client = self.clients[0]
         updated = self.write_method(client, "patch", self.path, {

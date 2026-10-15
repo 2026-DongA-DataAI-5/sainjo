@@ -422,6 +422,30 @@
       }
     }
 
+    if ((match = path.match(/^\/api\/vehicles\/(\d+)\/question-selections$/))) {
+      const vehicle = ownedVehicle(store, Number(match[1]));
+      store.questionSelections ||= {};
+      const keys = new Set(store.questionSelections[vehicle.id] || []);
+      if (method === 'GET') return envelope({ selected_question_keys: [...keys].sort() });
+      if (method === 'DELETE') {
+        store.questionSelections[vehicle.id] = [];
+        saveStore(store);
+        return envelope({ cleared: true });
+      }
+      if (method === 'PATCH') {
+        if (!payload || typeof payload.question_key !== 'string' || !/^[a-f0-9]{64}$/.test(payload.question_key)
+            || typeof payload.selected !== 'boolean' || Object.keys(payload).sort().join(',') !== 'question_key,selected') {
+          throw mockError(400, 'VALIDATION_ERROR');
+        }
+        if (payload.selected && !keys.has(payload.question_key) && keys.size >= 200) throw mockError(409, 'CONFLICT');
+        if (payload.selected) keys.add(payload.question_key);
+        else keys.delete(payload.question_key);
+        store.questionSelections[vehicle.id] = [...keys];
+        saveStore(store);
+        return envelope({ question_key: payload.question_key, selected: payload.selected });
+      }
+    }
+
     if ((match = path.match(/^\/api\/vehicles\/(\d+)\/management$/)) && method === 'GET') {
       const vehicle = ownedVehicle(store, Number(match[1]));
       return mockManagement(store, vehicle.id);
@@ -489,6 +513,12 @@
       create: async (vehicleId, payload) => request('POST', `/api/vehicles/${toId(vehicleId)}/records`, payload),
       update: async (id, payload) => request('PATCH', `/api/records/${toId(id)}`, payload),
       remove: async (id) => request('DELETE', `/api/records/${toId(id)}`),
+    },
+
+    questions: {
+      list: async (vehicleId) => request('GET', `/api/vehicles/${toId(vehicleId)}/question-selections`),
+      select: async (vehicleId, questionKey, selected) => request('PATCH', `/api/vehicles/${toId(vehicleId)}/question-selections`, { question_key: questionKey, selected }),
+      clear: async (vehicleId) => request('DELETE', `/api/vehicles/${toId(vehicleId)}/question-selections`),
     },
 
     management: {
