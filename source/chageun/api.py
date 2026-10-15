@@ -415,7 +415,7 @@ def update_vehicle(vehicle_id):
 
 RECORD_ENUMS = {
     "kind": {"previous_history", "maintenance_result"},
-    "item_key": {"engine-oil", "spark-plugs", "drive-belt", "brake-pads-discs", "ball-joint", "lower-arm", "lower-arm-ball-joint", "brake-fluid", "cabin-air-filter"},
+    "item_key": {"engine-oil", "spark-plugs", "drive-belt", "brake-pads-discs", "ball-joint", "lower-arm", "lower-arm-ball-joint", "brake-fluid", "cabin-air-filter", "coolant"},
     "component_position": {"unknown", "front", "rear", "left", "right", "front_left", "front_right", "rear_left", "rear_right"},
     "work_type": {"inspection", "replacement", "unknown"},
 }

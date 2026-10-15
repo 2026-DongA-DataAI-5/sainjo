@@ -31,7 +31,7 @@ class PageModeTests(unittest.TestCase):
         self.assertIn('data-management-content', dashboard)
         form = client.get("/maintenance/new").get_data(as_text=True)
         self.assertIn('value="unknown"', form)
-        self.assertNotIn('value="coolant"', form)
+        self.assertIn('value="coolant"', form)
         self.assertIn('value="brake-fluid"', form)
         self.assertIn('value="cabin-air-filter"', form)
         vehicle_form = client.get("/vehicle").get_data(as_text=True)
@@ -40,7 +40,7 @@ class PageModeTests(unittest.TestCase):
         self.assertIn("js/vehicle-scope.js", vehicle_form)
         detail = client.get("/items/engine-oil").get_data(as_text=True)
         self.assertIn('data-management-item="engine-oil"', detail)
-        for item_key in ("brake-fluid", "cabin-air-filter"):
+        for item_key in ("brake-fluid", "cabin-air-filter", "coolant"):
             with self.subTest(item_key=item_key):
                 self.assertEqual(client.get(f"/items/{item_key}").status_code, 200)
 

@@ -167,7 +167,7 @@
 
   const RECORD_SCHEMA = {
     kind: { type: 'enum', values: ['previous_history', 'maintenance_result'], required: true },
-    item_key: { type: 'enum', values: ['engine-oil', 'spark-plugs', 'drive-belt', 'brake-pads-discs', 'ball-joint', 'lower-arm', 'lower-arm-ball-joint', 'brake-fluid', 'cabin-air-filter'], required: true },
+    item_key: { type: 'enum', values: ['engine-oil', 'spark-plugs', 'drive-belt', 'brake-pads-discs', 'ball-joint', 'lower-arm', 'lower-arm-ball-joint', 'brake-fluid', 'cabin-air-filter', 'coolant'], required: true },
     component_position: { type: 'enum', values: ['unknown', 'front', 'rear', 'left', 'right', 'front_left', 'front_right', 'rear_left', 'rear_right'], required: true, defaultValue: 'unknown' },
     work_type: { type: 'enum', values: ['inspection', 'replacement', 'unknown'], required: true },
     date: { type: 'date' },

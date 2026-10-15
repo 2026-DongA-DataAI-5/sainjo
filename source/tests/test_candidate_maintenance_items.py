@@ -27,14 +27,70 @@ class CandidateMaintenanceItemTests(unittest.TestCase):
         return {
             rule["item_key"]: rule
             for rule in candidate_rules_for(vehicle)
-            if rule["item_key"] in {"brake-fluid", "cabin-air-filter"}
+            if rule["item_key"] in {"brake-fluid", "cabin-air-filter", "coolant"}
         }
 
-    def test_normal_candidates_include_brake_fluid_and_cabin_filter(self):
+    def test_normal_candidates_include_brake_fluid_cabin_filter_and_coolant(self):
         rules = self.selected_rules()
-        self.assertEqual(set(rules), {"brake-fluid", "cabin-air-filter"})
+        self.assertEqual(set(rules), {"brake-fluid", "cabin-air-filter", "coolant"})
         self.assertEqual(rules["brake-fluid"]["interval_km"], 50_000)
         self.assertEqual(rules["cabin-air-filter"]["interval_km"], 15_000)
+        self.assertEqual(rules["coolant"]["first_interval_km"], 200_000)
+        self.assertEqual(rules["coolant"]["first_interval_months"], 120)
+        self.assertEqual(rules["coolant"]["interval_km"], 40_000)
+        self.assertEqual(rules["coolant"]["interval_months"], 24)
+
+    def test_coolant_without_history_at_90000km_uses_first_mileage_and_date_baselines(self):
+        rule = self.selected_rules()["coolant"]
+        vehicle = {**VEHICLE, "in_service_date": "2021-10-15"}
+        result = evaluate_management(vehicle, [], rule, AS_OF_DATE)
+        self.assertEqual(result["history_status"], "unknown")
+        self.assertEqual(result["timing_status"], "upcoming")
+        self.assertEqual(result["next_mileage"], 200_000)
+        self.assertEqual(result["next_date"], "2031-10-15")
+        self.assertIn("이력 미확인", result["labels"])
+        self.assertIn("향후 관리 예정", result["labels"])
+        self.assertTrue(result["rights_review_pending"])
+
+    def test_coolant_without_in_service_date_keeps_time_axis_partial(self):
+        rule = self.selected_rules()["coolant"]
+        result = evaluate_management(VEHICLE, [], rule, AS_OF_DATE)
+        self.assertEqual(result["history_status"], "unknown")
+        self.assertEqual(result["timing_status"], "partial")
+        self.assertEqual(result["next_mileage"], 200_000)
+        self.assertIsNone(result["next_date"])
+        self.assertIn("vehicle.in_service_date", result["missing_fields"])
+        self.assertIn("이력 미확인", result["labels"])
+
+    def test_coolant_first_time_interval_is_due_when_ten_year_boundary_arrives(self):
+        rule = self.selected_rules()["coolant"]
+        vehicle = {
+            **VEHICLE,
+            "mileage": 150_000,
+            "reference_date": "2031-10-15",
+            "in_service_date": "2021-10-15",
+        }
+        result = evaluate_management(vehicle, [], rule, "2031-10-15")
+        self.assertEqual(result["timing_status"], "due")
+        self.assertEqual(result["next_mileage"], 200_000)
+        self.assertEqual(result["next_date"], "2031-10-15")
+
+    def test_coolant_replacement_restarts_both_recurring_intervals(self):
+        rule = self.selected_rules()["coolant"]
+        record = {
+            "vehicle_id": 1,
+            "kind": "previous_history",
+            "item_key": "coolant",
+            "work_type": "replacement",
+            "date": "2025-10-15",
+            "mileage": 80_000,
+        }
+        result = evaluate_management(VEHICLE, [record], rule, AS_OF_DATE)
+        self.assertEqual(result["history_status"], "recorded")
+        self.assertEqual(result["timing_status"], "upcoming")
+        self.assertEqual(result["next_mileage"], 120_000)
+        self.assertEqual(result["next_date"], "2027-10-15")
+        self.assertTrue(result["rights_review_pending"])
 
     def test_unknown_history_at_90000km_is_a_check_prompt_not_a_claim_of_missed_service(self):
         for item_key, first_mileage in (("brake-fluid", 50_000), ("cabin-air-filter", 15_000)):
@@ -85,6 +141,16 @@ class CandidateMaintenanceItemTests(unittest.TestCase):
         self.assertEqual(result["timing_status"], "unknown")
         self.assertIsNone(result["interval_km"])
         self.assertTrue(any("별도" in reason for reason in result["reasons"]))
+        self.assertTrue(result["rights_review_pending"])
+
+    def test_severe_coolant_does_not_reuse_the_normal_replacement_interval(self):
+        severe_vehicle = {**VEHICLE, "conditions": "severe"}
+        rule = self.selected_rules(severe_vehicle)["coolant"]
+        result = evaluate_management(severe_vehicle, [], rule, AS_OF_DATE)
+        self.assertTrue(rule["condition_based"])
+        self.assertEqual(result["timing_status"], "unknown")
+        self.assertIsNone(result["interval_km"])
+        self.assertTrue(any("가혹조건" in reason for reason in result["reasons"]))
         self.assertTrue(result["rights_review_pending"])
 
     def test_k5_candidates_do_not_apply_to_other_years_or_generations(self):

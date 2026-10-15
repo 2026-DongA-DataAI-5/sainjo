@@ -117,7 +117,7 @@ class RecordsApiTests(unittest.TestCase):
         self.assertEqual(listed["meta"]["mode"], "live")
 
     def test_new_maintenance_items_can_be_saved_and_read_back(self):
-        for item_key in ("brake-fluid", "cabin-air-filter"):
+        for item_key in ("brake-fluid", "cabin-air-filter", "coolant"):
             with self.subTest(item_key=item_key):
                 response = self.post({**VALID_RECORD, "item_key": item_key})
                 self.assertEqual(response.status_code, 201)
@@ -162,7 +162,7 @@ class RecordsApiTests(unittest.TestCase):
         cases = [("mileage", True), ("mileage", "10"), ("mileage", -1), ("mileage", 1.2),
                  ("mileage", 1000001), ("date", "2026-02-30"), ("date", "2999-01-01"),
                  ("date", ""), ("checked_date", "2999-01-01"), ("work_type", None),
-                 ("work_type", "fix"), ("kind", "question"), ("item_key", "coolant"),
+                 ("work_type", "fix"), ("kind", "question"), ("item_key", "unknown-part"),
                  ("source", " " * 2), ("result", "x" * 2001), ("source", "x" * 101),
                  ("vehicle_id", 999), ("created_at", "2026-01-01")]
         for field, value in cases:

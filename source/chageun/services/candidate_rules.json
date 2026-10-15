@@ -332,6 +332,56 @@
       "rights_status": "pending_confirmation",
       "review_status": "source_checked_pending_approval",
       "is_fixture": false
+    },
+    {
+      "rule_id": "KIA_DL3_2021_G20_COOLANT_NORMAL_CANDIDATE",
+      "item_key": "coolant",
+      "action": "replacement",
+      "conditions": "normal",
+      "first_interval_km": 200000,
+      "first_interval_months": 120,
+      "interval_km": 40000,
+      "interval_months": 24,
+      "applicability": {
+        "manufacturer": "기아",
+        "model": "K5",
+        "generation": "DL3",
+        "years": [2021],
+        "engine": "G2.0 CVVL",
+        "fuel": "가솔린",
+        "transmission": "자동"
+      },
+      "official_engine_name": "스마트스트림 G2.0 CVVL",
+      "source": "기아 2021년형 K5 DL3 취급설명서 통상조건 - 냉각수량 점검 및 교환",
+      "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
+      "checked_date": "2026-10-15",
+      "rights_status": "pending_confirmation",
+      "review_status": "source_checked_pending_approval",
+      "is_fixture": false
+    },
+    {
+      "rule_id": "KIA_DL3_2021_G20_COOLANT_SEVERE_CANDIDATE",
+      "item_key": "coolant",
+      "action": "inspection",
+      "conditions": "severe",
+      "condition_based": true,
+      "condition_based_reason": "가혹조건 표에는 냉각수의 별도 수치 정비주기가 제시되지 않아 통상조건 교환주기를 적용하지 않습니다. 냉각수량·누수 여부와 이전 교환기록을 정비소에서 확인하세요.",
+      "applicability": {
+        "manufacturer": "기아",
+        "model": "K5",
+        "generation": "DL3",
+        "years": [2021],
+        "engine": "G2.0 CVVL",
+        "fuel": "가솔린",
+        "transmission": "자동"
+      },
+      "official_engine_name": "스마트스트림 G2.0 CVVL",
+      "source": "기아 2021년형 K5 DL3 취급설명서 가혹조건 - 냉각수 별도 주기 미제시",
+      "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
+      "checked_date": "2026-10-15",
+      "rights_status": "pending_confirmation",
+      "review_status": "source_checked_pending_approval",
+      "is_fixture": false
     }
   ]
 }
