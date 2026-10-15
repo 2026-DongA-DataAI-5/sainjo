@@ -170,6 +170,23 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     assert.ok(await page.locator('[data-management-questions] article h2').count() > 1);
     check('detail and question pages use server management');
 
+    await page.goto(`${base}/maintenance/new`);
+    await page.locator('#item').selectOption('lower-arm');
+    await page.locator('#component-position').selectOption('front_right');
+    await page.locator('#work-type').selectOption('replacement');
+    await page.locator('#work-date').fill('2026-02-01');
+    await page.locator('#work-mileage').fill('21000');
+    await page.locator('#result').fill('브라우저 시험 로워암 교환');
+    await page.locator('#record-form button[type=submit]').click();
+    await page.waitForURL('**/timeline');
+    await page.locator('[data-saved-records]').filter({ hasText: '로워암 교환' }).waitFor();
+    await page.goto(`${base}/dashboard`);
+    const ballJointRow = page.locator('[data-management-content] article')
+      .filter({ hasText: '볼 조인트 · 앞 오른쪽' });
+    await ballJointRow.waitFor();
+    await ballJointRow.locator('.badge').filter({ hasText: '이력 미확인' }).waitFor();
+    check('lower-arm replacement persists separately and leaves ball-joint history unknown');
+
     await register(`${username}_b`);
     await login(`${username}_b`);
     await page.locator('[data-vehicle-name]').filter({ hasText: '등록' }).waitFor();

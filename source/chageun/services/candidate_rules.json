@@ -205,7 +205,7 @@
       "review_status": "source_checked_pending_approval",
       "is_fixture": false,
       "rule_id": "KIA_DL3_2021_G20_BALL_JOINT_INSPECTION_CANDIDATE",
-      "item_key": "lower-arm-ball-joint",
+      "item_key": "ball-joint",
       "action": "inspection",
       "first_interval_km": 10000,
       "interval_km": 10000
@@ -231,7 +231,7 @@
       "review_status": "source_checked_pending_approval",
       "is_fixture": false,
       "rule_id": "KIA_DL3_2021_G20_BALL_JOINT_SEVERE_CANDIDATE",
-      "item_key": "lower-arm-ball-joint",
+      "item_key": "ball-joint",
       "action": "inspection",
       "condition_based": true
     }

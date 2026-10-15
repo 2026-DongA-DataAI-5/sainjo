@@ -13,6 +13,7 @@ MIGRATIONS = (
     "001_vehicle_date_and_service_items.sql",
     "002_add_brake_and_ball_joint_items.sql",
     "003_add_record_component_position.sql",
+    "004_separate_lower_arm_and_ball_joint.sql",
 )
 
 
@@ -78,6 +79,12 @@ def main():
 
             migration_dir = ROOT / "source/chageun/migrations"
             for migration in MIGRATIONS:
+                if migration == "004_separate_lower_arm_and_ball_joint.sql":
+                    cursor.execute(
+                        "INSERT INTO records (vehicle_id, kind, item_key, component_position, work_type, result) "
+                        "VALUES (%s, 'maintenance_result', 'lower-arm-ball-joint', 'front_right', 'replacement', 'legacy combined entry')",
+                        (vehicle_id,),
+                    )
                 for statement in split_sql(migration_dir / migration):
                     cursor.execute(statement)
 
@@ -92,11 +99,19 @@ def main():
             if legacy_record != ("engine-oil", 85000, "legacy record", "unknown"):
                 raise AssertionError(f"Legacy service record changed during migration: {legacy_record!r}")
 
+            cursor.execute(
+                "SELECT item_key, component_position, result FROM records WHERE vehicle_id = %s AND result = 'legacy combined entry'",
+                (vehicle_id,),
+            )
+            if cursor.fetchone() != ("lower-arm-ball-joint", "front_right", "legacy combined entry"):
+                raise AssertionError("Legacy combined part history was not preserved as entered.")
+
             items_and_positions = (
                 ("spark-plugs", "unknown"),
                 ("drive-belt", "unknown"),
                 ("brake-pads-discs", "front_left"),
-                ("lower-arm-ball-joint", "front_right"),
+                ("ball-joint", "front_right"),
+                ("lower-arm", "front_right"),
             )
             for item_key, position in items_and_positions:
                 cursor.execute(
@@ -118,11 +133,11 @@ def main():
                 raise AssertionError("Database accepted invalid component position 'center'.")
 
             cursor.execute("SELECT COUNT(*) FROM records WHERE vehicle_id = %s", (vehicle_id,))
-            if cursor.fetchone()[0] != 5:
-                raise AssertionError("Expected one preserved record and four supported new records.")
+            if cursor.fetchone()[0] != 7:
+                raise AssertionError("Expected two preserved records and five supported new records.")
 
         connection.commit()
-        print("Migration chain 001 → 002 → 003 preserves legacy data and enforces current constraints.")
+        print("Migration chain 001 → 002 → 003 → 004 preserves legacy data and separates lower-arm and ball-joint records.")
     except Exception:
         connection.rollback()
         raise

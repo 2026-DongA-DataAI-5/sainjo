@@ -1,4 +1,4 @@
--- Minimal schema representing the database immediately before migrations 001-003.
+-- Minimal schema representing the database immediately before migrations 001-004.
 -- Used only by check_migrations.py against its dedicated disposable CI database.
 CREATE TABLE users (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,

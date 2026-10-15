@@ -132,7 +132,9 @@ def _finish(
         "spark-plugs": "점화플러그",
         "drive-belt": "구동벨트",
         "brake-pads-discs": "브레이크 패드·디스크",
-        "lower-arm-ball-joint": "로워암 볼 조인트",
+        "ball-joint": "볼 조인트",
+        "lower-arm": "로워암",
+        "lower-arm-ball-joint": "로워암·볼 조인트 (과거 통합 기록)",
     }.get(item.get("item_key"), "해당 항목")
     work_name = "점검" if item.get("action") == "inspection" else "교환"
     if timing_status == "due":

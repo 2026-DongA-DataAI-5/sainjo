@@ -415,7 +415,7 @@ def update_vehicle(vehicle_id):
 
 RECORD_ENUMS = {
     "kind": {"previous_history", "maintenance_result"},
-    "item_key": {"engine-oil", "spark-plugs", "drive-belt", "brake-pads-discs", "lower-arm-ball-joint"},
+    "item_key": {"engine-oil", "spark-plugs", "drive-belt", "brake-pads-discs", "ball-joint", "lower-arm", "lower-arm-ball-joint"},
     "component_position": {"unknown", "front", "rear", "left", "right", "front_left", "front_right", "rear_left", "rear_right"},
     "work_type": {"inspection", "replacement", "unknown"},
 }
@@ -587,7 +587,7 @@ def get_management(vehicle_id):
         calculation_mode = "test_fixture"
     as_of_date = current_app.config.get("CHAGEUN_MANAGEMENT_AS_OF_DATE") or _today_korea().isoformat()
     items = [_record_out(row) for row in records.list_records_for_management(vehicle_id)]
-    positional_item_keys = {"brake-pads-discs", "lower-arm-ball-joint"}
+    positional_item_keys = {"brake-pads-discs", "ball-joint", "lower-arm", "lower-arm-ball-joint"}
     positions = ("front_left", "front_right", "rear_left", "rear_right")
     evaluated = []
     for rule in rules:

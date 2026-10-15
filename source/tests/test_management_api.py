@@ -109,7 +109,7 @@ class ManagementApiTests(unittest.TestCase):
     def test_brake_and_ball_joint_guidance_is_scoped_to_four_positions(self):
         response = self.client.get(self.management_path)
         items = response.get_json()["data"]["items"]
-        for item_key in ("brake-pads-discs", "lower-arm-ball-joint"):
+        for item_key in ("brake-pads-discs", "ball-joint"):
             scoped = [item for item in items if item["item_key"] == item_key]
             self.assertEqual(
                 {item["component_position"] for item in scoped},
@@ -130,6 +130,28 @@ class ManagementApiTests(unittest.TestCase):
         scoped = {item["component_position"]: item for item in items if item["item_key"] == "brake-pads-discs"}
         self.assertEqual(scoped["front_left"]["history_status"], "recorded")
         self.assertEqual(scoped["front_right"]["history_status"], "unknown")
+
+    def test_lower_arm_replacement_is_separate_from_ball_joint_inspection_history(self):
+        record = {
+            **support.VALID_RECORD,
+            "item_key": "lower-arm",
+            "component_position": "front_right",
+            "work_type": "replacement",
+            "date": "2026-01-01",
+            "mileage": 90000,
+        }
+        created = self.post(record)
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.get_json()["data"]["item_key"], "lower-arm")
+
+        stored = self.client.get(f"/api/vehicles/{self.vehicle_id}/records").get_json()["data"]
+        self.assertEqual([entry["item_key"] for entry in stored], ["lower-arm"])
+        items = self.client.get(self.management_path).get_json()["data"]["items"]
+        ball_joint = next(
+            item for item in items
+            if item["item_key"] == "ball-joint" and item["component_position"] == "front_right"
+        )
+        self.assertEqual(ball_joint["history_status"], "unknown")
 
     def test_unknown_brake_record_location_is_reported_as_missing_information(self):
         record = {

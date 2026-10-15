@@ -1,7 +1,11 @@
 {% extends 'base.html' %}
 {% block content %}
 <a class="back-link" href="{{ url_for('pages.dashboard') }}">← 관리 대시보드</a><div class="page-heading"><div><p class="eyebrow">관리항목 상세</p><h1>{{ item.name }}</h1><p class="lede">{{ item.role }}</p></div></div>
-{% if api_mode == 'live' %}
+{% if api_mode == 'live' and record_only %}
+<p class="field-note" data-record-only-note>로워암 이력을 별도로 저장합니다. 제조사 정기 교환 주기를 확인하지 못해 다음 교환 시점을 계산하지 않습니다. 정비내역서에서 부품명과 앞·뒤 좌우 위치를 확인해 주세요.</p>
+<section class="content-section"><h2>볼 조인트와 이력을 분리합니다</h2><p>볼 조인트 정기 점검 이력은 로워암 교환 기록으로 바뀌지 않습니다. 사용자가 입력한 기록은 정비 증빙과 자동 대조되지 않습니다.</p></section>
+<a class="button primary" href="{{ url_for('pages.maintenance_new') }}">로워암 정비 결과 기록</a>
+{% elif api_mode == 'live' %}
 <p class="prototype-note" data-demo-data-note>관리 안내를 불러오는 중입니다.</p>
 <section class="content-section" data-management-content data-management-item="{{ item.key }}" aria-live="polite"></section>
 <section class="content-section"><h2>정비소에 확인할 질문</h2><div data-management-questions></div></section>
