@@ -231,6 +231,7 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     check('live record edit persists the corrected value');
     await updatedEngineOilEntry.locator('.record-delete').click();
     await page.locator('.delete-confirmation').getByRole('button', { name: '삭제' }).click();
+    await updatedEngineOilEntry.waitFor({ state: 'detached' });
     await page.locator('[data-saved-records] .saved-entry').filter({ hasText: '브라우저 시험 점화플러그 교환' }).waitFor();
     assert.equal(await page.locator('[data-saved-records] .saved-entry').count(), 1);
     assert.equal(recordDeletes, 1);
