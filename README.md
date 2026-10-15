@@ -80,7 +80,7 @@ MySQL 8.0 실행 파일이 설치된 Windows에서 최초 한 번 아래를 실�
 .\.venv\Scripts\python.exe -B source/scripts/build_pages.py
 ```
 
-GitHub의 Python/MySQL workflow는 버려지는 MySQL 8.0 서비스에서 스키마를 만들고 전체 시험과 정적 빌드를 실행합니다. workflow의 암호는 해당 임시 CI 서비스에만 쓰는 고정 시험값이며 운영 자격증명이 아닙니다.
+GitHub Actions는 버려지는 MySQL 8.0 서비스에서 Python·DB 시험을 마친 뒤, 별도 임시 DB에서 Playwright Chromium 브라우저 흐름도 실행합니다. 브라우저 시험 실패 시 화면 자료와 서버 로그를 workflow artifact로 보관합니다. CI 암호는 해당 임시 시험 서비스에만 쓰며 운영 자격증명이 아닙니다.
 
 브라우저 시험은 Node.js가 설치된 PC에서 아래 순서로 실행합니다. 첫 설치 때 Playwright 의존성을 복원하고 Playwright와 맞는 Chromium을 받습니다. 이후에는 MySQL과 앱을 켠 뒤 브라우저 시험 명령을 실행하면 됩니다. 앱은 `127.0.0.1:8081`에서 실행해야 하며, 별도 주소를 쓸 때는 `CHAGEUN_BROWSER_BASE`를 지정합니다. 화면 증거는 Git에서 제외된 `.mysql-test/screenshots/`에 저장됩니다.
 

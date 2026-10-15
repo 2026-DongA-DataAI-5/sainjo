@@ -61,5 +61,63 @@ jobs:
           CHAGEUN_MIGRATION_TEST_DATABASE: chageun_migration_test
           CHAGEUN_MIGRATION_TEST_CONFIRM: disposable-migration-db
       - run: python -B source/scripts/run_tests.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: source/tests/package-lock.json
+      - name: Install browser test dependencies
+        working-directory: source/tests
+        run: npm ci
+      - name: Install Playwright Chromium
+        working-directory: source/tests
+        run: npx playwright install --with-deps chromium
+      - name: Initialize isolated browser-test database
+        run: |
+          python - <<'PY'
+          import pymysql
+          from pathlib import Path
+          conn = pymysql.connect(host='127.0.0.1', user='root',
+                                 password='ci-disposable-db-only', database='chageun_test')
+          with conn.cursor() as cursor:
+              cursor.execute('CREATE DATABASE chageun_browser_test CHARACTER SET utf8mb4')
+              cursor.execute('USE chageun_browser_test')
+              schema = '\n'.join(line for line in Path('source/chageun/schema.sql').read_text().splitlines()
+                                 if not line.lstrip().startswith('--'))
+              for statement in schema.split(';'):
+                  if statement.strip(): cursor.execute(statement)
+          conn.commit()
+          conn.close()
+          PY
+      - name: Run real-browser flow against MySQL
+        working-directory: source/tests
+        env:
+          CHAGEUN_SERVER_MODE: '1'
+          CHAGEUN_SECRET_KEY: ci-disposable-session-only-key
+          CHAGEUN_MYSQL_HOST: 127.0.0.1
+          CHAGEUN_MYSQL_PORT: '3306'
+          CHAGEUN_MYSQL_USER: root
+          CHAGEUN_MYSQL_PASSWORD: ci-disposable-db-only
+          CHAGEUN_MYSQL_DATABASE: chageun_browser_test
+        run: |
+          PYTHONPATH=.. python -c "from chageun import create_app; create_app().run(host='127.0.0.1', port=8081)" > /tmp/chageun-browser-app.log 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8081/login > /dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then cat /tmp/chageun-browser-app.log; exit 1; fi
+          npm run test:browser
+      - name: Upload browser screenshots and app log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-failure
+          path: |
+            .mysql-test/screenshots/
+            /tmp/chageun-browser-app.log
+          if-no-files-found: ignore
       - name: Build mock preview from tracked source
         run: python -B source/scripts/build_pages.py
