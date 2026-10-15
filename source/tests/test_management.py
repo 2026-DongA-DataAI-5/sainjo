@@ -46,13 +46,13 @@ class ManagementEngineTests(unittest.TestCase):
                 "next_date", "reasons", "missing_fields", "rule_id", "source",
                 "source_url", "checked_date", "questions", "is_fixture", "action",
                 "rights_status", "rights_status_label", "rights_review_pending",
-                "condition_based", "component_position", "interval_km", "interval_months",
+                "condition_based", "matched_severe_condition_codes", "component_position", "interval_km", "interval_months",
                 "first_interval_km", "first_interval_months",
             },
         )
         for field in ("item_key", "history_status", "timing_status"):
             self.assertIsInstance(result[field], str)
-        for field in ("labels", "reasons", "missing_fields", "questions"):
+        for field in ("labels", "reasons", "missing_fields", "questions", "matched_severe_condition_codes"):
             self.assertIsInstance(result[field], list)
         for field in ("rule_id", "source", "checked_date"):
             self.assertTrue(result[field] is None or isinstance(result[field], str))
@@ -484,7 +484,7 @@ class ManagementEngineTests(unittest.TestCase):
                         "next_date", "reasons", "missing_fields", "rule_id", "source",
                         "source_url", "checked_date", "questions", "is_fixture", "action",
                         "rights_status", "rights_status_label", "rights_review_pending",
-                        "condition_based", "component_position", "interval_km", "interval_months",
+                        "condition_based", "matched_severe_condition_codes", "component_position", "interval_km", "interval_months",
                         "first_interval_km", "first_interval_months",
                     },
                 )
@@ -582,7 +582,7 @@ class ManagementEngineTests(unittest.TestCase):
                 "next_date", "reasons", "missing_fields", "rule_id", "source",
                 "source_url", "checked_date", "questions", "is_fixture", "action",
                 "rights_status", "rights_status_label", "rights_review_pending",
-                "condition_based", "component_position", "interval_km", "interval_months",
+                "condition_based", "matched_severe_condition_codes", "component_position", "interval_km", "interval_months",
                 "first_interval_km", "first_interval_months",
             },
         )

@@ -147,6 +147,37 @@ class ManagementApiTests(unittest.TestCase):
         self.assertEqual(spark_plugs["rights_status_label"], "사용 권리 확인 중")
         self.assertIn("1", spark_plugs["reasons"][0])
 
+    def test_severe_engine_oil_requires_selected_condition_and_returns_matched_code(self):
+        vehicle = self.vehicles.rows[0]
+        vehicle.update(
+            conditions="severe",
+            severe_condition_codes=[12],
+            mileage=90_000,
+            reference_date=date.fromisoformat(self.fixture["input"]["as_of_date"]),
+        )
+        response = self.post({
+            **support.VALID_RECORD,
+            "kind": "previous_history",
+            "item_key": "engine-oil",
+            "work_type": "replacement",
+            "date": "2025-10-01",
+            "mileage": 80_000,
+        })
+        self.assertEqual(response.status_code, 201)
+
+        body = self.client.get(self.management_path).get_json()
+        oil = next(item for item in body["data"]["items"] if item["item_key"] == "engine-oil")
+        self.assertEqual(oil["interval_km"], 7_500)
+        self.assertEqual(oil["interval_months"], 6)
+        self.assertEqual(oil["next_mileage"], 87_500)
+        self.assertEqual(oil["next_date"], "2026-04-01")
+        self.assertEqual(oil["matched_severe_condition_codes"], [12])
+        self.assertTrue(oil["rights_review_pending"])
+
+        vehicle["severe_condition_codes"] = []
+        body = self.client.get(self.management_path).get_json()
+        self.assertFalse(any(item["item_key"] == "engine-oil" for item in body["data"]["items"]))
+
     def test_only_verified_candidate_year_and_conditions_resolve(self):
         vehicle = self.vehicles.rows[0]
         vehicle["year"] = 2022
@@ -155,6 +186,7 @@ class ManagementApiTests(unittest.TestCase):
         self.assertIn("rule", item["missing_fields"])
         vehicle["year"] = 2021
         vehicle["conditions"] = "severe"
+        vehicle["severe_condition_codes"] = [1]
         item, _ = self.item()
         self.assertEqual(item["rule_id"], "KIA_DL3_2021_G20_OIL_SEVERE_CANDIDATE")
 

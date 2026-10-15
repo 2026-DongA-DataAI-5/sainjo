@@ -649,6 +649,10 @@
           const link = appendText(title, 'a', '', titleText);
           link.href = appPath(`/items/${encodeURIComponent(item.item_key)}`);
           for (const reason of item.reasons) appendText(main, 'p', '', reason);
+          if (Array.isArray(item.matched_severe_condition_codes) && item.matched_severe_condition_codes.length) {
+            const appliedConditions = item.matched_severe_condition_codes.map(code => code + '번').join(' · ');
+            appendText(main, 'p', 'muted', '적용한 가혹조건: ' + appliedConditions);
+          }
           if (item.condition_based || (item.timing_status !== 'unknown' && item.timing_status !== 'unsupported' && item.action)) {
             const actionText = item.condition_based ? '안내 방식: 세부 가혹조건에 해당할 때 상태를 수시 점검하고 필요 시 정비' : `안내 방식: 정기 ${ACTION_LABELS[item.action]}`;
             appendText(main, 'p', 'muted', actionText);

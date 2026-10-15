@@ -219,6 +219,37 @@ class CandidateMaintenanceItemTests(unittest.TestCase):
                 vehicle = {**VEHICLE, **change}
                 self.assertEqual(self.selected_rules(vehicle), {})
 
+    def test_severe_engine_oil_requires_a_selected_manual_code_and_uses_the_matching_interval(self):
+        severe_vehicle = {**VEHICLE, "conditions": "severe"}
+        self.assertFalse(any(
+            rule["item_key"] == "engine-oil" for rule in candidate_rules_for(severe_vehicle)
+        ))
+
+        oil_record = {
+            "vehicle_id": 1,
+            "kind": "previous_history",
+            "item_key": "engine-oil",
+            "work_type": "replacement",
+            "date": "2026-02-01",
+            "mileage": 80_000,
+        }
+        for code in range(1, 13):
+            with self.subTest(severe_condition_code=code):
+                vehicle = {**severe_vehicle, "severe_condition_codes": [code]}
+                rules = [rule for rule in candidate_rules_for(vehicle) if rule["item_key"] == "engine-oil"]
+                self.assertEqual(len(rules), 1)
+                rule = rules[0]
+                self.assertEqual(rule["interval_km"], 7_500)
+                self.assertEqual(rule["interval_months"], 6)
+                self.assertEqual(rule["matched_severe_condition_codes"], [code])
+                self.assertEqual(rule["rights_status"], "pending_confirmation")
+
+                result = evaluate_management(vehicle, [oil_record], rule, AS_OF_DATE)
+                self.assertEqual(result["next_mileage"], 87_500)
+                self.assertEqual(result["next_date"], "2026-08-01")
+                self.assertEqual(result["matched_severe_condition_codes"], [code])
+                self.assertIn("지금 확인할 항목", result["labels"])
+                self.assertTrue(result["rights_review_pending"])
 
 if __name__ == "__main__":
     unittest.main()

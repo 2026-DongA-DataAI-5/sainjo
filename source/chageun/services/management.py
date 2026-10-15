@@ -62,6 +62,16 @@ def _add_months(value: date, months: int) -> date:
     return date(year, month, day)
 
 
+def _matched_severe_condition_codes(rule: dict[str, Any]) -> list[int]:
+    values = rule.get("matched_severe_condition_codes")
+    if not isinstance(values, (list, tuple, set)):
+        return []
+    return sorted({
+        value for value in values
+        if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 12
+    })
+
+
 def _empty_item(
     *,
     item_key: str = ITEM_KEY,
@@ -104,6 +114,7 @@ def _empty_item(
         "is_fixture": is_fixture,
         "action": rule.get("action") if rule.get("action") in ("inspection", "replacement") else None,
         "condition_based": rule.get("condition_based") is True,
+        "matched_severe_condition_codes": _matched_severe_condition_codes(rule),
         "replacement_resets_inspection": rule.get("replacement_resets_inspection") is True,
         "component_position": component_position,
         "interval_km": rule.get("interval_km") if _valid_mileage(rule.get("interval_km")) else None,

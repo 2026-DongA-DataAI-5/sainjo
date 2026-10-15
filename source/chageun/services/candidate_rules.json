@@ -22,7 +22,7 @@
       "interval_months": 12,
       "source": "기아 2021년형 K5 DL3 취급설명서 정기 점검 - 통상조건",
       "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
-      "checked_date": "2026-10-14",
+      "checked_date": "2026-10-15",
       "rights_status": "pending_confirmation",
       "review_status": "source_checked_pending_approval",
       "is_fixture": false
@@ -46,12 +46,13 @@
       "conditions": "severe",
       "interval_km": 7500,
       "interval_months": 6,
-      "source": "기아 2021년형 K5 DL3 취급설명서 정기 점검 - 가혹조건",
+      "source": "기아 2021년형 K5 DL3 취급설명서 정기 점검 - 가혹조건 1~12번",
       "source_url": "https://ownersmanual.kia.com/full_webhelp/DL3/2021/ko_KR/topics/t00735.html",
-      "checked_date": "2026-10-14",
+      "checked_date": "2026-10-15",
       "rights_status": "pending_confirmation",
       "review_status": "source_checked_pending_approval",
-      "is_fixture": false
+      "is_fixture": false,
+      "severe_condition_codes": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     },
     {
       "applicability": {
