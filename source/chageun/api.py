@@ -1,4 +1,4 @@
-"""차근 API v1.0 - 1단계: 최소 인증(가입·로그인·로그아웃·내 정보).
+"""차근 API v1.0: 인증, 계정별 차량·관리기록, 차량별 관리 안내.
 
 규약: docs 'API 주소·인증·오류·목록' 절. 응답 data는 snake_case, 비밀번호·해시·내부 DB 값은 응답하지 않습니다.
 """
@@ -313,7 +313,7 @@ def _vehicle_values(body):
         and len(set(severe_condition_codes)) == len(severe_condition_codes)
     ):
         values["severe_condition_codes"] = sorted(severe_condition_codes)
-        if conditions in VEHICLE_CONDITIONS and conditions != "severe" and severe_condition_codes:
+        if isinstance(conditions, str) and conditions in VEHICLE_CONDITIONS and conditions != "severe" and severe_condition_codes:
             reject("severe_condition_codes", "세부 가혹조건은 운행조건을 가혹조건으로 선택했을 때만 입력할 수 있습니다.")
     else:
         reject("severe_condition_codes", "기아 설명서의 가혹조건 번호 1~12를 중복 없이 목록으로 입력해 주세요.")

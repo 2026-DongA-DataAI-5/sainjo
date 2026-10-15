@@ -8,6 +8,7 @@
     .\\.venv\\Scripts\\python.exe -m unittest discover -s tests -p "test_api*.py"
 """
 
+import copy
 import os
 import re
 import secrets
@@ -596,6 +597,25 @@ class VehicleApiTest(unittest.TestCase):
                     self.client_a.get("/api/vehicles/1").get_json()["data"]["mileage"],
                     VALID_VEHICLE["mileage"],
                 )
+
+    def test_create_rejects_non_string_conditions_without_saving(self):
+        for conditions in ([], {}, ["normal"]):
+            with self.subTest(conditions=conditions):
+                body = {**VALID_VEHICLE, "conditions": conditions}
+                response = self.create(self.client_a, body)
+                error = self.assert_error(response, 400, "VALIDATION_ERROR")
+                self.assertIn("conditions", error["error"]["fields"])
+                self.assertEqual(self.vehicles.rows, [])
+
+    def test_patch_rejects_non_string_conditions_without_changing_vehicle(self):
+        self.create(self.client_a)
+        before = copy.deepcopy(self.vehicles.rows)
+        for conditions in ([], {}, ["normal"]):
+            with self.subTest(conditions=conditions):
+                response = self.patch_vehicle(self.client_a, 1, {"conditions": conditions})
+                error = self.assert_error(response, 400, "VALIDATION_ERROR")
+                self.assertIn("conditions", error["error"]["fields"])
+                self.assertEqual(self.vehicles.rows, before)
 
     def test_second_vehicle_for_same_account_is_409(self):
         self.assertEqual(self.create(self.client_a).status_code, 201)
