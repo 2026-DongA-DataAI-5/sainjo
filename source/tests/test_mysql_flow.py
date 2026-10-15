@@ -116,9 +116,9 @@ class MySqlRecordFlowTests(unittest.TestCase):
         self.assertEqual(client.get(path).get_json()["data"], [])
         self.assertEqual(self.write_method(client, "delete", record_path).status_code, 404)
 
-    def test_real_mysql_persists_coolant_brake_fluid_and_cabin_filter_records(self):
+    def test_real_mysql_persists_engine_air_cleaner_coolant_brake_fluid_and_cabin_filter_records(self):
         client = self.clients[0]
-        for item_key in ("brake-fluid", "cabin-air-filter", "coolant"):
+        for item_key in ("air-filter", "brake-fluid", "cabin-air-filter", "coolant"):
             with self.subTest(item_key=item_key):
                 response = self.write(client, self.path + "/records", {
                     **self.replacement(), "item_key": item_key, "mileage": 20_000,
@@ -127,7 +127,7 @@ class MySqlRecordFlowTests(unittest.TestCase):
                 self.assertEqual(response.get_json()["data"]["item_key"], item_key)
 
         stored = client.get(self.path + "/records").get_json()["data"]
-        self.assertEqual({row["item_key"] for row in stored}, {"brake-fluid", "cabin-air-filter", "coolant"})
+        self.assertEqual({row["item_key"] for row in stored}, {"air-filter", "brake-fluid", "cabin-air-filter", "coolant"})
 
     def test_real_mysql_vehicle_partial_update_persists_with_account_ownership(self):
         client, other = self.clients

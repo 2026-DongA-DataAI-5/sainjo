@@ -79,6 +79,15 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     await coolantRow.filter({ hasText: '거리 기준: 200,000km · 기간 기준: 2031-10-15' }).waitFor();
     await coolantRow.locator('.badge').filter({ hasText: '이력 미확인' }).waitFor();
     check('90,000km coolant guidance shows first 200,000km or 10-year milestone and unknown history');
+    const airFilterInspection = page.locator('[data-management-content] article')
+      .filter({ hasText: '엔진 에어클리너 필터 · 점검' });
+    const airFilterReplacement = page.locator('[data-management-content] article')
+      .filter({ hasText: '엔진 에어클리너 필터 · 교환' });
+    await airFilterInspection.locator('.badge').filter({ hasText: '사용 권리 확인 중' }).waitFor();
+    await airFilterReplacement.locator('.badge').filter({ hasText: '사용 권리 확인 중' }).waitFor();
+    await airFilterInspection.filter({ hasText: '거리 기준: 10,000km' }).waitFor();
+    await airFilterReplacement.filter({ hasText: '거리 기준: 40,000km' }).waitFor();
+    check('engine air-cleaner inspection and replacement schedules are separate');
     await page.goto(`${base}/vehicle`);
     await page.locator('[data-save-status]').filter({ hasText: '정보 수정' }).waitFor();
     assert.equal(await page.locator('#vehicle-form button[type=submit]').isVisible(), true);
@@ -213,6 +222,28 @@ fs.mkdirSync(screenshotDir, { recursive: true });
       await row.locator('.badge').filter({ hasText: '사용 권리 확인 중' }).waitFor();
     }
     check('brake fluid and cabin filter records save and update candidate next-mileage guidance');
+
+    for (const [workType, workDate, mileage] of [
+      ['replacement', '2026-02-01', '80000'], ['inspection', '2026-03-01', '90000'],
+    ]) {
+      await page.goto(`${base}/maintenance/new`);
+      await page.locator('#item').selectOption('air-filter');
+      await page.locator('#work-type').selectOption(workType);
+      await page.locator('#work-date').fill(workDate);
+      await page.locator('#work-mileage').fill(mileage);
+      await page.locator('#result').fill(`브라우저 시험 엔진 에어클리너 ${workType}`);
+      await page.locator('#record-form button[type=submit]').click();
+      await page.waitForURL('**/timeline');
+    }
+    await page.goto(`${base}/dashboard`);
+    const airFilterInspectionAfterSave = page.locator('[data-management-content] article')
+      .filter({ hasText: '엔진 에어클리너 필터 · 점검' });
+    const airFilterReplacementAfterSave = page.locator('[data-management-content] article')
+      .filter({ hasText: '엔진 에어클리너 필터 · 교환' });
+    await airFilterInspectionAfterSave.filter({ hasText: '거리 기준: 100,000km' }).waitFor();
+    await airFilterReplacementAfterSave.filter({ hasText: '거리 기준: 120,000km' }).waitFor();
+    await airFilterInspectionAfterSave.locator('.badge').filter({ hasText: '확인된 관리 이력' }).waitFor();
+    check('air-cleaner inspection and replacement histories save and restart their own schedules');
 
     await page.goto(`${base}/maintenance/new`);
     await page.locator('#item').selectOption('coolant');

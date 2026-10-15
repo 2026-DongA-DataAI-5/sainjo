@@ -153,6 +153,53 @@ class CandidateMaintenanceItemTests(unittest.TestCase):
         self.assertTrue(any("가혹조건" in reason for reason in result["reasons"]))
         self.assertTrue(result["rights_review_pending"])
 
+    def test_engine_air_cleaner_exposes_separate_normal_inspection_and_replacement_schedules(self):
+        rules = [rule for rule in candidate_rules_for(VEHICLE) if rule["item_key"] == "air-filter"]
+        self.assertEqual({rule["action"] for rule in rules}, {"inspection", "replacement"})
+        by_action = {rule["action"]: rule for rule in rules}
+        self.assertEqual(by_action["inspection"]["first_interval_km"], 10_000)
+        self.assertEqual(by_action["inspection"]["interval_km"], 10_000)
+        self.assertEqual(by_action["replacement"]["first_interval_km"], 40_000)
+        self.assertEqual(by_action["replacement"]["interval_km"], 40_000)
+        self.assertTrue(by_action["inspection"]["replacement_resets_inspection"])
+        self.assertTrue(all(rule["rights_status"] == "pending_confirmation" for rule in rules))
+
+    def test_engine_air_cleaner_history_resets_only_its_matching_schedule(self):
+        vehicle = {**VEHICLE, "mileage": 30_000}
+        rules = [rule for rule in candidate_rules_for(vehicle) if rule["item_key"] == "air-filter"]
+        inspection = next(rule for rule in rules if rule["action"] == "inspection")
+        replacement = next(rule for rule in rules if rule["action"] == "replacement")
+        records = [{
+            "vehicle_id": 1, "kind": "previous_history", "item_key": "air-filter",
+            "work_type": "inspection", "date": "2026-01-01", "mileage": 20_000,
+        }]
+        check_result = evaluate_management(vehicle, records, inspection, AS_OF_DATE)
+        replace_result = evaluate_management(vehicle, records, replacement, AS_OF_DATE)
+        self.assertEqual(check_result["next_mileage"], 30_000)
+        self.assertEqual(check_result["timing_status"], "due")
+        self.assertEqual(replace_result["next_mileage"], 40_000)
+        self.assertEqual(replace_result["timing_status"], "upcoming")
+
+    def test_engine_air_cleaner_replacement_also_restarts_inspection_schedule(self):
+        vehicle = {**VEHICLE, "mileage": 90_000}
+        rules = [rule for rule in candidate_rules_for(vehicle) if rule["item_key"] == "air-filter"]
+        inspection = next(rule for rule in rules if rule["action"] == "inspection")
+        replacement = next(rule for rule in rules if rule["action"] == "replacement")
+        records = [{
+            "vehicle_id": 1, "kind": "previous_history", "item_key": "air-filter",
+            "work_type": "replacement", "date": "2026-01-01", "mileage": 80_000,
+        }]
+        check_result = evaluate_management(vehicle, records, inspection, AS_OF_DATE)
+        replace_result = evaluate_management(vehicle, records, replacement, AS_OF_DATE)
+        self.assertEqual(check_result["next_mileage"], 90_000)
+        self.assertEqual(check_result["timing_status"], "due")
+        self.assertEqual(replace_result["next_mileage"], 120_000)
+        self.assertEqual(replace_result["timing_status"], "upcoming")
+
+    def test_engine_air_cleaner_candidates_do_not_apply_to_severe_conditions(self):
+        severe_vehicle = {**VEHICLE, "conditions": "severe"}
+        self.assertFalse(any(rule["item_key"] == "air-filter" for rule in candidate_rules_for(severe_vehicle)))
+
     def test_k5_candidates_do_not_apply_to_other_years_or_generations(self):
         for change in ({"year": 2022}, {"generation": "JF"}):
             with self.subTest(change=change):

@@ -117,7 +117,7 @@ class RecordsApiTests(unittest.TestCase):
         self.assertEqual(listed["meta"]["mode"], "live")
 
     def test_new_maintenance_items_can_be_saved_and_read_back(self):
-        for item_key in ("brake-fluid", "cabin-air-filter", "coolant"):
+        for item_key in ("air-filter", "brake-fluid", "cabin-air-filter", "coolant"):
             with self.subTest(item_key=item_key):
                 response = self.post({**VALID_RECORD, "item_key": item_key})
                 self.assertEqual(response.status_code, 201)

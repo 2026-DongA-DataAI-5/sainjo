@@ -619,7 +619,9 @@
           if (item.is_fixture) appendText(badges, 'span', 'badge unknown', '가상 시험 기준');
           const title = appendText(main, 'h3', '', '');
           const positionLabel = POSITION_LABELS[item.component_position];
-          const titleText = `${ITEM_LABELS[item.item_key] || '관리항목'}${positionLabel ? ` · ${positionLabel}` : ''}`;
+          const itemActions = new Set(items.filter((candidate) => candidate.item_key === item.item_key).map((candidate) => candidate.action));
+          const actionLabel = itemActions.size > 1 ? ` · ${ACTION_LABELS[item.action] || '관리'}` : '';
+          const titleText = `${ITEM_LABELS[item.item_key] || '관리항목'}${actionLabel}${positionLabel ? ` · ${positionLabel}` : ''}`;
           const link = appendText(title, 'a', '', titleText);
           link.href = appPath(`/items/${encodeURIComponent(item.item_key)}`);
           for (const reason of item.reasons) appendText(main, 'p', '', reason);
@@ -652,7 +654,9 @@
           if (!Array.isArray(item.questions) || item.questions.length === 0) continue;
           const group = appendText(questions, 'article', 'question-section', '');
           const positionLabel = POSITION_LABELS[item.component_position];
-          const title = `${ITEM_LABELS[item.item_key] || '관리항목'}${positionLabel ? ` · ${positionLabel}` : ''}`;
+          const itemActions = new Set(items.filter((candidate) => candidate.item_key === item.item_key).map((candidate) => candidate.action));
+          const actionLabel = itemActions.size > 1 ? ` · ${ACTION_LABELS[item.action] || '관리'}` : '';
+          const title = `${ITEM_LABELS[item.item_key] || '관리항목'}${actionLabel}${positionLabel ? ` · ${positionLabel}` : ''}`;
           appendText(group, 'h2', '', title);
           for (const question of item.questions) appendText(group, 'p', '', question);
         }

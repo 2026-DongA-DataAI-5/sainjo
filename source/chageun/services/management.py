@@ -104,6 +104,7 @@ def _empty_item(
         "is_fixture": is_fixture,
         "action": rule.get("action") if rule.get("action") in ("inspection", "replacement") else None,
         "condition_based": rule.get("condition_based") is True,
+        "replacement_resets_inspection": rule.get("replacement_resets_inspection") is True,
         "component_position": component_position,
         "interval_km": rule.get("interval_km") if _valid_mileage(rule.get("interval_km")) else None,
         "interval_months": rule.get("interval_months") if _positive_interval(rule.get("interval_months")) else None,
@@ -132,6 +133,7 @@ def _finish(
 
     item_name = {
         "engine-oil": "엔진 오일·오일필터",
+        "air-filter": "엔진 에어클리너 필터",
         "brake-fluid": "브레이크액",
         "cabin-air-filter": "공조장치용 에어필터",
         "spark-plugs": "점화플러그",
@@ -141,7 +143,11 @@ def _finish(
         "lower-arm": "로워암",
         "lower-arm-ball-joint": "로워암·볼 조인트 (과거 통합 기록)",
     }.get(item.get("item_key"), "해당 항목")
-    work_name = "점검" if item.get("action") == "inspection" else "교환"
+    work_name = (
+        "점검·교환"
+        if item.get("action") == "inspection" and item.get("replacement_resets_inspection") is True
+        else "점검" if item.get("action") == "inspection" else "교환"
+    )
     if timing_status == "due":
         question = f"마지막 {item_name} {work_name} 기록과 운행조건을 확인해 주실 수 있나요?"
     elif "record.component_position" in item["missing_fields"]:
@@ -159,6 +165,7 @@ def _finish(
     else:
         question = "마지막 교환 기록과 운행조건을 함께 확인해 주실 수 있나요?"
     item["questions"] = [question]
+    item.pop("replacement_resets_inspection", None)
     return item
 
 
@@ -443,13 +450,19 @@ def evaluate_management(
             missing_fields=["record.component_position"] if unscoped_position else [],
         )
 
+    inspection_replacement_resets = action == "inspection" and rule.get("replacement_resets_inspection") is True
     schedule_records = (
-        [record for record in relevant_records if record.get("work_type") == "inspection"]
+        [
+            record for record in relevant_records
+            if record.get("work_type") == "inspection"
+            or (inspection_replacement_resets and record.get("work_type") == "replacement")
+        ]
         if action == "inspection"
         else replacements
     )
     latest, history_reasons, history_missing = _latest_replacement(
-        schedule_records, "점검" if action == "inspection" else "교환"
+        schedule_records,
+        "점검 또는 교환" if inspection_replacement_resets else "점검" if action == "inspection" else "교환",
     )
     if latest is None:
         if not schedule_records and _valid_mileage(rule.get("first_interval_km")):

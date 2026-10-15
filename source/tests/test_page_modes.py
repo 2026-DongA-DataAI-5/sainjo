@@ -16,7 +16,7 @@ class PageModeTests(unittest.TestCase):
 
     def test_live_pages_use_live_mode_and_do_not_show_sample_timelines(self):
         client = create_app({"TESTING": True, "CHAGEUN_SERVER_MODE": True, "SECRET_KEY": "page-test-only"}).test_client()
-        for path in ("/vehicle", "/history/new", "/maintenance/new", "/timeline", "/dashboard", "/items/engine-oil", "/questions"):
+        for path in ("/vehicle", "/history/new", "/maintenance/new", "/timeline", "/dashboard", "/items/engine-oil", "/items/air-filter", "/questions"):
             with self.subTest(path=path):
                 response = client.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -32,6 +32,7 @@ class PageModeTests(unittest.TestCase):
         form = client.get("/maintenance/new").get_data(as_text=True)
         self.assertIn('value="unknown"', form)
         self.assertIn('value="coolant"', form)
+        self.assertIn('value="air-filter"', form)
         self.assertIn('value="brake-fluid"', form)
         self.assertIn('value="cabin-air-filter"', form)
         vehicle_form = client.get("/vehicle").get_data(as_text=True)
@@ -40,7 +41,7 @@ class PageModeTests(unittest.TestCase):
         self.assertIn("js/vehicle-scope.js", vehicle_form)
         detail = client.get("/items/engine-oil").get_data(as_text=True)
         self.assertIn('data-management-item="engine-oil"', detail)
-        for item_key in ("brake-fluid", "cabin-air-filter", "coolant"):
+        for item_key in ("air-filter", "brake-fluid", "cabin-air-filter", "coolant"):
             with self.subTest(item_key=item_key):
                 self.assertEqual(client.get(f"/items/{item_key}").status_code, 200)
 

@@ -75,6 +75,34 @@ class ManagementApiTests(unittest.TestCase):
                 self.assertTrue(item["rights_review_pending"])
                 self.assertEqual(item["rights_status_label"], "사용 권리 확인 중")
 
+    def test_engine_air_cleaner_returns_independent_inspection_and_replacement_guidance(self):
+        vehicle = self.vehicles.rows[0]
+        vehicle.update(mileage=30_000, reference_date=date.fromisoformat(self.fixture["input"]["as_of_date"]))
+        self.assertEqual(self.post({
+            **support.VALID_RECORD, "kind": "previous_history", "item_key": "air-filter",
+            "work_type": "inspection", "date": "2026-10-01", "mileage": 20_000,
+        }).status_code, 201)
+
+        response = self.client.get(self.management_path).get_json()
+        items = [item for item in response["data"]["items"] if item["item_key"] == "air-filter"]
+        by_action = {item["action"]: item for item in items}
+        self.assertEqual(set(by_action), {"inspection", "replacement"})
+        self.assertEqual(by_action["inspection"]["next_mileage"], 30_000)
+        self.assertEqual(by_action["inspection"]["timing_status"], "due")
+        self.assertEqual(by_action["replacement"]["next_mileage"], 40_000)
+        self.assertEqual(by_action["replacement"]["timing_status"], "upcoming")
+        self.assertTrue(all(item["rights_review_pending"] for item in by_action.values()))
+
+        self.assertEqual(self.post({
+            **support.VALID_RECORD, "kind": "previous_history", "item_key": "air-filter",
+            "work_type": "replacement", "date": "2026-10-05", "mileage": 25_000,
+        }).status_code, 201)
+        response = self.client.get(self.management_path).get_json()
+        items = [item for item in response["data"]["items"] if item["item_key"] == "air-filter"]
+        by_action = {item["action"]: item for item in items}
+        self.assertEqual(by_action["inspection"]["next_mileage"], 35_000)
+        self.assertEqual(by_action["replacement"]["next_mileage"], 65_000)
+
     def test_only_verified_candidate_year_and_conditions_resolve(self):
         vehicle = self.vehicles.rows[0]
         vehicle["year"] = 2022
