@@ -89,6 +89,7 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     await page.waitForURL('**/dashboard');
     assert.equal(vehiclePatches, 1);
     await page.goto(`${base}/vehicle`);
+    await page.locator('[data-save-status]').filter({ hasText: '정보 수정' }).waitFor();
     assert.equal(await page.locator('#model-year').inputValue(), '2022');
     assert.equal(await page.locator('#mileage').inputValue(), '26000');
     assert.equal(await page.locator('#reference-date').inputValue(), today);
@@ -178,7 +179,7 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     await page.locator('[data-management-content]').getByRole('link', { name: '차량 등록하기' }).waitFor();
     check('second account does not see first account data');
     await login(username);
-    await page.locator('[data-management-content] article').waitFor();
+    await page.locator('[data-management-content] article').first().waitFor();
     for (const width of [320, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);

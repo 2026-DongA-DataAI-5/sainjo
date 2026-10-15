@@ -82,7 +82,27 @@ MySQL 8.0 실행 파일이 설치된 Windows에서 최초 한 번 아래를 실�
 
 GitHub의 Python/MySQL workflow는 버려지는 MySQL 8.0 서비스에서 스키마를 만들고 전체 시험과 정적 빌드를 실행합니다. workflow의 암호는 해당 임시 CI 서비스에만 쓰는 고정 시험값이며 운영 자격증명이 아닙니다.
 
-브라우저 시험은 별도로 Node.js와 Playwright가 준비된 환경에서 서버를 실행한 뒤 `node source/tests/browser-flow.cjs`로 수행합니다. 설치된 Chrome을 사용할 때는 `CHAGEUN_BROWSER_EXECUTABLE`, 다른 서버 주소는 `CHAGEUN_BROWSER_BASE`를 지정합니다. 화면 증거는 Git에서 제외된 `.mysql-test/screenshots/`에 저장됩니다.
+브라우저 시험은 Node.js가 설치된 PC에서 아래 순서로 실행합니다. 첫 설치 때 Playwright 의존성을 복원하고 Playwright와 맞는 Chromium을 받습니다. 이후에는 MySQL과 앱을 켠 뒤 브라우저 시험 명령을 실행하면 됩니다. 앱은 `127.0.0.1:8081`에서 실행해야 하며, 별도 주소를 쓸 때는 `CHAGEUN_BROWSER_BASE`를 지정합니다. 화면 증거는 Git에서 제외된 `.mysql-test/screenshots/`에 저장됩니다.
+
+```powershell
+# 저장소 루트: 시험용 MySQL 시작
+.\.venv\Scripts\python.exe source/scripts/local_mysql.py start
+
+# source/tests 폴더에서 최초 한 번: Playwright와 Chromium 설치
+Set-Location source\tests
+npm ci
+npx playwright install chromium
+
+# 별도 터미널에서 저장소 루트 기준: 실제 서버 화면 실행
+Set-Location ..\..
+.\.venv\Scripts\python.exe source/scripts/run_local.py
+
+# source/tests 폴더에서: 실제 가입·차량·기록·재로그인 브라우저 시험
+Set-Location source\tests
+npm run test:browser
+```
+
+브라우저 시험은 별도의 실제 DB 저장 계정을 사용합니다. MySQL 시험용 Python 테스트와 같은 DB를 쓰지 않으며, 테스트 계정·차량·기록이 `chageun_test_demo`에 남을 수 있습니다. 설치된 Chrome을 쓰려면 `CHAGEUN_BROWSER_EXECUTABLE`을 지정합니다.
 
 ## 정적 미리보기
 
