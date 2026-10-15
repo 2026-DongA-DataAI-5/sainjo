@@ -1,4 +1,4 @@
--- 차근 MySQL 스키마 v1.0 (1단계: users / vehicles / records)
+-- 차근 MySQL 스키마 v1.0 (users / vehicles / records / question_selections)
 --
 -- 주의: 시험 DB 전용입니다. 실제 사용자 DB에 실행하거나 테스트 중 DROP하지 마세요.
 -- 적용 예시(시험 DB 이름을 직접 지정):
@@ -9,7 +9,7 @@
 -- 날짜·거리가 없는 값은 NULL입니다. 0km와 NULL은 다른 값입니다.
 -- 자료 확인일(checked_date)은 증빙 자동 검증 결과가 아닙니다.
 -- 기존 DB는 migrations/001_vehicle_date_and_service_items.sql부터 번호 순서대로 한 번 적용하세요.
--- 기존 DB 적용 순서: migrations/001 → 002 → 003 → 004 → 005 → 006 → 007 → 008
+-- 기존 DB 적용 순서: migrations/001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 → 009
 
 CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,

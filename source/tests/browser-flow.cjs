@@ -276,6 +276,11 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     await page.locator('[data-question-clear]:enabled').waitFor();
     const savedQuestion = page.locator(`[data-question-key="${selectedKey}"]`);
     assert.equal(await savedQuestion.isChecked(), true);
+    await page.screenshot({ path: path.join(screenshotDir, 'questions-live-390.png') });
+    await page.setViewportSize({ width: 320, height: 844 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1));
+    await page.screenshot({ path: path.join(screenshotDir, 'questions-live-320.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
     check('selected mechanic question persists after reload');
 
     await page.route('**/question-selections', async route => {

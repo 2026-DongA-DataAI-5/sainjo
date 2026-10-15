@@ -9,6 +9,7 @@
 - 관리기록 저장·목록·수정·삭제 API와 타임라인 연결: 점검 / 교환 / 작업유형 미확인, CSRF·계정 소유권 확인, 삭제 전 확인
 - 실제 DB 기록을 순수 Python 관리판단 엔진에 전달하고 화면에 결과 표시
 - 로그인부터 차량·기록 저장, 재로그인 후 재조회, 다른 계정 접근 차단
+- 정비소 질문 선택을 내 차량에 서버 저장하고 재로그인 후 복원: 개별 선택·해제·전체 초기화. 질문에서 해당 부품·위치의 정비 결과 입력으로 바로 이동하며 실제 작업 유형은 직접 확인합니다.
 
 기아 공식 취급설명서에서 국내 K5 DL3 2021년형 G2.0 CVVL의 정비 후보 기준을 확인해 프로토타입 계산에 연결했습니다. 결과에는 **사용 권리 확인 중**을 표시하며, 기아가 차근의 계산·안내를 승인한 상태가 아닙니다. 적용 범위는 2021년형 한정이며 2020·2022·2023년형, JF, 다른 엔진·연료·변속기에 확대 적용하지 않습니다. 별도로 켠 가상 시험 기준은 `test_fixture`, `is_fixture=true`로 표시하며 실제 기아 권장 주기가 아닙니다. 자세한 상태와 근거는 [`SOURCE_RIGHTS_REVIEW.md`](source/chageun/services/SOURCE_RIGHTS_REVIEW.md)를 참고하세요.
 
@@ -72,7 +73,7 @@ MySQL 8.0 실행 파일이 설치된 Windows에서 최초 한 번 아래를 실�
 
 ## 검증
 
-기본 전체 시험은 실제 MySQL 시험 9개를 건너뜁니다. `--mysql`은 준비된 전용 시험 DB에 연결합니다. 기존 가드가 DB 이름, 연결 DB, 테이블, 비어 있는 users를 확인하므로 사용자 DB를 비우거나 우회하지 않습니다. 기존 시험 DB에 자료가 있으면 새 전용 DB를 준비하거나 GitHub Actions의 임시 MySQL에서 검증합니다.
+기본 전체 시험은 실제 MySQL 시험 10개를 건너뜁니다. `--mysql`은 준비된 전용 시험 DB에 연결합니다. 기존 가드가 DB 이름, 연결 DB, 테이블, 비어 있는 users를 확인하므로 사용자 DB를 비우거나 우회하지 않습니다. 기존 시험 DB에 자료가 있으면 새 전용 DB를 준비하거나 GitHub Actions의 임시 MySQL에서 검증합니다.
 
 ```powershell
 .\.venv\Scripts\python.exe -B source/scripts/run_tests.py
@@ -103,6 +104,15 @@ npm run test:browser
 ```
 
 브라우저 시험은 별도의 실제 DB 저장 계정을 사용합니다. MySQL 시험용 Python 테스트와 같은 DB를 쓰지 않으며, 테스트 계정·차량·기록이 `chageun_test_demo`에 남을 수 있습니다. 설치된 Chrome을 쓰려면 `CHAGEUN_BROWSER_EXECUTABLE`을 지정합니다.
+
+## 정비소 질문 선택과 기존 DB 갱신
+
+- `GET /api/vehicles/{id}/question-selections`: 본인 차량의 선택한 질문 키 목록.
+- `PATCH /api/vehicles/{id}/question-selections`: `question_key`(64자리 소문자 16진수), `selected`(JSON boolean)로 한 질문만 선택·해제. 같은 요청을 다시 보내도 중복 저장하지 않습니다.
+- `DELETE /api/vehicles/{id}/question-selections`: 해당 차량의 질문 선택만 초기화합니다. 차량·정비기록은 삭제하지 않습니다. 변경 API에는 로그인과 CSRF가 필요하며 타인 차량은 404입니다.
+- 질문 내용·부품·위치·적용 기준이 달라지면 질문 키가 바뀝니다. 과거 선택을 바뀐 질문에 자동 적용하지 않습니다. 차량별 최대 200개를 저장하며 초기화로 이전 선택도 정리할 수 있습니다.
+- 기존 DB가 001~008 마이그레이션까지 적용된 상태라면 `source/chageun/migrations/009_add_question_selections.sql`을 해당 DB에 추가 적용하세요. 최초 설치는 최신 `schema.sql`을 사용합니다. 009는 기존 차량·정비기록을 변경하지 않는 테이블 추가입니다. 앱 버전을 되돌려도 이 테이블을 남겨 선택 자료를 보존할 수 있습니다.
+- mock 질문 체크는 계속 이 브라우저에만 저장합니다. 실제 계정별 저장은 서버 모드에서만 제공합니다. 선택·질문·답변 확인은 정비 완료가 아닙니다.
 
 ## 정적 미리보기
 

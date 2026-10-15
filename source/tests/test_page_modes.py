@@ -47,6 +47,9 @@ class PageModeTests(unittest.TestCase):
                 self.assertEqual(client.get(f"/items/{item_key}").status_code, 200)
         self.assertIn('data-severe-conditions', vehicle_form)
         self.assertIn('name="severe_condition_codes"', vehicle_form)
+        questions = client.get('/questions').get_data(as_text=True)
+        self.assertIn('data-question-clear', questions)
+        self.assertIn('재로그인해도 유지', questions)
         spark_plugs = client.get("/items/spark-plugs").get_data(as_text=True)
         self.assertIn('data-management-item="spark-plugs"', spark_plugs)
 
@@ -68,3 +71,6 @@ class PageModeTests(unittest.TestCase):
         dashboard = client.get("/dashboard").get_data(as_text=True)
         self.assertIn('data-management-controls ', dashboard)
         self.assertNotIn('data-management-controls hidden', dashboard)
+        questions = client.get('/questions').get_data(as_text=True)
+        self.assertIn('maintenance/new?item=', questions)
+        self.assertIn('현재 브라우저에 저장', questions)
