@@ -3,7 +3,7 @@ from flask import Blueprint, abort, current_app, jsonify, render_template, reque
 from .sample_data import DEMO_HISTORY, DEMO_ITEMS, DEMO_VEHICLE, STATUS_LABELS
 
 pages = Blueprint("pages", __name__)
-RECORD_ITEM_KEYS = {"engine-oil", "spark-plugs", "drive-belt", "brake-pads-discs", "ball-joint", "lower-arm", "lower-arm-ball-joint"}
+RECORD_ITEM_KEYS = {"engine-oil", "spark-plugs", "drive-belt", "brake-pads-discs", "ball-joint", "lower-arm", "lower-arm-ball-joint", "brake-fluid", "cabin-air-filter"}
 RECORD_ENTRY_ITEM_KEYS = RECORD_ITEM_KEYS - {"lower-arm-ball-joint"}
 
 

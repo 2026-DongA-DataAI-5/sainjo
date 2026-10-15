@@ -14,6 +14,7 @@ MIGRATIONS = (
     "002_add_brake_and_ball_joint_items.sql",
     "003_add_record_component_position.sql",
     "004_separate_lower_arm_and_ball_joint.sql",
+    "005_add_brake_fluid_and_cabin_filter.sql",
 )
 
 
@@ -112,6 +113,8 @@ def main():
                 ("brake-pads-discs", "front_left"),
                 ("ball-joint", "front_right"),
                 ("lower-arm", "front_right"),
+                ("brake-fluid", "unknown"),
+                ("cabin-air-filter", "unknown"),
             )
             for item_key, position in items_and_positions:
                 cursor.execute(
@@ -133,11 +136,11 @@ def main():
                 raise AssertionError("Database accepted invalid component position 'center'.")
 
             cursor.execute("SELECT COUNT(*) FROM records WHERE vehicle_id = %s", (vehicle_id,))
-            if cursor.fetchone()[0] != 7:
-                raise AssertionError("Expected two preserved records and five supported new records.")
+            if cursor.fetchone()[0] != 9:
+                raise AssertionError("Expected two preserved records and seven supported new records.")
 
         connection.commit()
-        print("Migration chain 001 → 002 → 003 → 004 preserves legacy data and separates lower-arm and ball-joint records.")
+        print("Migration chain 001 → 002 → 003 → 004 → 005 preserves legacy data and supports the current record items.")
     except Exception:
         connection.rollback()
         raise

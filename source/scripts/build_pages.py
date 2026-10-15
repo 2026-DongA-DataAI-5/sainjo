@@ -20,9 +20,6 @@ ROUTES = (
     "/vehicle",
     "/history/new",
     "/maintenance/new",
-    "/items/engine-oil",
-    "/items/air-filter",
-    "/items/coolant",
     "/questions",
     "/timeline",
 )
@@ -44,16 +41,25 @@ def page_path(route: str) -> Path:
     return OUTPUT / route.strip("/") / "index.html"
 
 
+def page_routes(item_keys) -> tuple[str, ...]:
+    routes = ROUTES + tuple(f"/items/{item_key}" for item_key in item_keys)
+    if len(routes) != len(set(routes)):
+        raise ValueError("Static route list contains duplicates")
+    return routes
+
+
 def main() -> int:
     sys.path.insert(0, str(ROOT))
     from chageun import create_app
+    from chageun.sample_data import DEMO_ITEMS
 
     if OUTPUT.exists():
         shutil.rmtree(OUTPUT)
     OUTPUT.mkdir(parents=True)
 
     client = create_app().test_client()
-    for route in ROUTES:
+    routes = page_routes(item["key"] for item in DEMO_ITEMS)
+    for route in routes:
         response = client.get(route)
         if response.status_code != 200:
             raise RuntimeError(f"{route} returned HTTP {response.status_code}")
@@ -69,8 +75,8 @@ def main() -> int:
     (OUTPUT / ".nojekyll").write_text("", encoding="utf-8")
 
     generated_pages = list(OUTPUT.rglob("index.html"))
-    if len(generated_pages) != len(ROUTES):
-        raise RuntimeError(f"Expected {len(ROUTES)} pages, generated {len(generated_pages)}")
+    if len(generated_pages) != len(routes):
+        raise RuntimeError(f"Expected {len(routes)} pages, generated {len(generated_pages)}")
     print(f"Built {len(generated_pages)} static pages under {OUTPUT}")
     print(f"GitHub Pages base path: {BASE_PATH}/")
     return 0

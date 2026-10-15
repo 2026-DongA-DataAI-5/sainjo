@@ -2,9 +2,18 @@
 
 import unittest
 from chageun import create_app
+from chageun.sample_data import DEMO_ITEMS
+from scripts.build_pages import page_routes
 
 
 class PageModeTests(unittest.TestCase):
+    def test_static_builder_includes_every_demo_item_detail(self):
+        routes = page_routes(item["key"] for item in DEMO_ITEMS)
+        self.assertEqual(len(routes), len(set(routes)))
+        for item in DEMO_ITEMS:
+            with self.subTest(item_key=item["key"]):
+                self.assertIn(f"/items/{item['key']}", routes)
+
     def test_live_pages_use_live_mode_and_do_not_show_sample_timelines(self):
         client = create_app({"TESTING": True, "CHAGEUN_SERVER_MODE": True, "SECRET_KEY": "page-test-only"}).test_client()
         for path in ("/vehicle", "/history/new", "/maintenance/new", "/timeline", "/dashboard", "/items/engine-oil", "/questions"):
@@ -23,12 +32,17 @@ class PageModeTests(unittest.TestCase):
         form = client.get("/maintenance/new").get_data(as_text=True)
         self.assertIn('value="unknown"', form)
         self.assertNotIn('value="coolant"', form)
+        self.assertIn('value="brake-fluid"', form)
+        self.assertIn('value="cabin-air-filter"', form)
         vehicle_form = client.get("/vehicle").get_data(as_text=True)
         self.assertIn("국내 판매 2021년형 기아 K5 DL3", vehicle_form)
         self.assertIn("다른 사양도 차량과 이력은 등록할 수 있지만", vehicle_form)
         self.assertIn("js/vehicle-scope.js", vehicle_form)
         detail = client.get("/items/engine-oil").get_data(as_text=True)
         self.assertIn('data-management-item="engine-oil"', detail)
+        for item_key in ("brake-fluid", "cabin-air-filter"):
+            with self.subTest(item_key=item_key):
+                self.assertEqual(client.get(f"/items/{item_key}").status_code, 200)
 
     def test_mock_pages_and_assets_still_render(self):
         client = create_app({"TESTING": True}).test_client()

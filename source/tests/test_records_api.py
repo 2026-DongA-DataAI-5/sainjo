@@ -116,6 +116,13 @@ class RecordsApiTests(unittest.TestCase):
         self.assertEqual(listed["meta"]["pagination"], {"page": 1, "page_size": 20, "total": 1})
         self.assertEqual(listed["meta"]["mode"], "live")
 
+    def test_new_maintenance_items_can_be_saved_and_read_back(self):
+        for item_key in ("brake-fluid", "cabin-air-filter"):
+            with self.subTest(item_key=item_key):
+                response = self.post({**VALID_RECORD, "item_key": item_key})
+                self.assertEqual(response.status_code, 201)
+                self.assertEqual(response.get_json()["data"]["item_key"], item_key)
+
     def test_anonymous_requests_are_401_before_csrf(self):
         client = self.app.test_client()
         self.assertEqual(client.get(self.path).status_code, 401)

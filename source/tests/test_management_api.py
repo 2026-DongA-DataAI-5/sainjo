@@ -60,6 +60,21 @@ class ManagementApiTests(unittest.TestCase):
         self.assertEqual(item["next_mileage"], 25_000)
         self.assertEqual(item["next_date"], "2027-01-01")
 
+    def test_brake_fluid_and_cabin_filter_are_returned_as_pending_candidates(self):
+        vehicle = self.vehicles.rows[0]
+        vehicle.update(mileage=90_000, reference_date=date.fromisoformat(self.fixture["input"]["as_of_date"]))
+        body = self.client.get(self.management_path).get_json()
+        items = {item["item_key"]: item for item in body["data"]["items"]}
+        self.assertEqual(body["meta"]["calculation_mode"], "candidate_rights_pending")
+        for item_key, first_mileage in (("brake-fluid", 50_000), ("cabin-air-filter", 15_000)):
+            with self.subTest(item_key=item_key):
+                item = items[item_key]
+                self.assertEqual(item["timing_status"], "due")
+                self.assertEqual(item["history_status"], "unknown")
+                self.assertEqual(item["next_mileage"], first_mileage)
+                self.assertTrue(item["rights_review_pending"])
+                self.assertEqual(item["rights_status_label"], "사용 권리 확인 중")
+
     def test_only_verified_candidate_year_and_conditions_resolve(self):
         vehicle = self.vehicles.rows[0]
         vehicle["year"] = 2022

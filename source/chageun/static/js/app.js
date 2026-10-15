@@ -37,7 +37,7 @@
   };
   const WORK_TYPE_LABELS = { inspection: '점검', replacement: '교환', unknown: '작업 유형 미확인' };
   const KIND_LABELS = { previous_history: '이전 이력 입력', maintenance_result: '정비 결과 입력' };
-  const ITEM_LABELS = { 'engine-oil': '엔진 오일·오일필터', 'air-filter': '엔진 에어클리너 필터', coolant: '냉각수', 'spark-plugs': '점화플러그', 'drive-belt': '구동벨트', 'brake-pads-discs': '브레이크 패드·디스크', 'ball-joint': '볼 조인트', 'lower-arm': '로워암(컨트롤 암)', 'lower-arm-ball-joint': '로워암·볼 조인트 (과거 통합 기록)' };
+  const ITEM_LABELS = { 'engine-oil': '엔진 오일·오일필터', 'air-filter': '엔진 에어클리너 필터', 'cabin-air-filter': '공조장치용 에어필터', 'brake-fluid': '브레이크액', coolant: '냉각수', 'spark-plugs': '점화플러그', 'drive-belt': '구동벨트', 'brake-pads-discs': '브레이크 패드·디스크', 'ball-joint': '볼 조인트', 'lower-arm': '로워암(컨트롤 암)', 'lower-arm-ball-joint': '로워암·볼 조인트 (과거 통합 기록)' };
   const POSITION_LABELS = { unknown: '위치 미확인', front: '앞쪽', rear: '뒤쪽', left: '왼쪽', right: '오른쪽', front_left: '앞 왼쪽', front_right: '앞 오른쪽', rear_left: '뒤 왼쪽', rear_right: '뒤 오른쪽' };
   const ACTION_LABELS = { inspection: '점검', replacement: '교환' };
 

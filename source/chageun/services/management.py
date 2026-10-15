@@ -132,6 +132,8 @@ def _finish(
 
     item_name = {
         "engine-oil": "엔진 오일·오일필터",
+        "brake-fluid": "브레이크액",
+        "cabin-air-filter": "공조장치용 에어필터",
         "spark-plugs": "점화플러그",
         "drive-belt": "구동벨트",
         "brake-pads-discs": "브레이크 패드·디스크",
@@ -431,10 +433,13 @@ def evaluate_management(
         )
 
     if rule.get("condition_based") is True:
+        condition_reason = rule.get("condition_based_reason")
+        if not isinstance(condition_reason, str) or not condition_reason.strip() or len(condition_reason) > 300:
+            condition_reason = "해당 운행조건은 부품 상태를 확인해 필요 시 점검합니다. 고정 교환주기는 안내하지 않습니다."
         return _finish(
             item,
             timing_status="unknown",
-            reasons=["해당 운행조건은 부품 상태를 확인해 필요 시 점검합니다. 고정 교환주기는 안내하지 않습니다."],
+            reasons=[condition_reason],
             missing_fields=["record.component_position"] if unscoped_position else [],
         )
 

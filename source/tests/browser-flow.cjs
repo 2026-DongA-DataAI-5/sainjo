@@ -189,6 +189,26 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     await ballJointRow.locator('.badge').filter({ hasText: '이력 미확인' }).waitFor();
     check('lower-arm replacement persists separately and leaves ball-joint history unknown');
 
+    for (const [itemKey, mileage] of [['brake-fluid', '20000'], ['cabin-air-filter', '21000']]) {
+      await page.goto(`${base}/maintenance/new`);
+      await page.locator('#item').selectOption(itemKey);
+      await page.locator('#work-type').selectOption('replacement');
+      await page.locator('#work-date').fill('2026-03-01');
+      await page.locator('#work-mileage').fill(mileage);
+      await page.locator('#result').fill(`브라우저 시험 ${itemKey} 교환`);
+      await page.locator('#record-form button[type=submit]').click();
+      await page.waitForURL('**/timeline');
+      await page.locator('[data-saved-records]').filter({ hasText: `브라우저 시험 ${itemKey} 교환` }).waitFor();
+    }
+    await page.goto(`${base}/dashboard`);
+    for (const [itemKey, nextMileage] of [['brake-fluid', '70,000'], ['cabin-air-filter', '36,000']]) {
+      const row = page.locator('[data-management-content] article').filter({ hasText: itemKey === 'brake-fluid' ? '브레이크액' : '공조장치용 에어필터' });
+      await row.locator('.badge').filter({ hasText: '확인된 관리 이력' }).waitFor();
+      assert.match(await row.innerText(), new RegExp(nextMileage));
+      await row.locator('.badge').filter({ hasText: '사용 권리 확인 중' }).waitFor();
+    }
+    check('brake fluid and cabin filter records save and update candidate next-mileage guidance');
+
     await register(`${username}_b`);
     await login(`${username}_b`);
     await page.locator('[data-vehicle-name]').filter({ hasText: '등록' }).waitFor();
