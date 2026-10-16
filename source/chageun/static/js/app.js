@@ -191,6 +191,24 @@
 
   async function initVehicleForm(form) {
     const status = form.querySelector('.form-message');
+    const referenceVehicleButton = form.querySelector('[data-fill-reference-vehicle]');
+    const referenceVehicleStatus = form.querySelector('[data-reference-vehicle-status]');
+    referenceVehicleButton?.addEventListener('click', () => {
+      const referenceVehicle = {
+        manufacturer: '기아',
+        model: 'K5',
+        generation: 'DL3',
+        year: '2021',
+        engine: 'G2.0 CVVL',
+        fuel: '가솔린',
+        transmission: '자동',
+      };
+      for (const [name, value] of Object.entries(referenceVehicle)) {
+        form.elements.namedItem(name).value = value;
+      }
+      referenceVehicleStatus.textContent = '기준 사양을 입력했습니다. 실제 주행거리와 측정일, 최초 등록일, 운행조건을 확인한 뒤 저장해 주세요.';
+      referenceVehicleStatus.hidden = false;
+    });
     form.querySelectorAll('input[name="conditions"]').forEach((field) => {
       field.addEventListener('change', () => syncSevereConditionControls(form));
     });
@@ -199,6 +217,7 @@
     showMessage(status, '차량 정보를 불러오는 중입니다.');
     try {
       const vehicle = await loadVehicle();
+      if (referenceVehicleButton) referenceVehicleButton.hidden = Boolean(vehicle);
       if (vehicle) fillVehicleForm(form, vehicle);
       syncSevereConditionControls(form);
       if (vehicle && api.mode === 'live') {
