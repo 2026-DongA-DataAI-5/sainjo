@@ -483,6 +483,53 @@ fs.mkdirSync(screenshotDir, { recursive: true });
     check('second account does not see first account data');
     await login(username);
     await page.locator('[data-management-content] article').first().waitFor();
+    await page.goto(`${base}/vehicle`);
+    const originalVehicleId = await page.locator('[data-vehicle-select]').inputValue();
+    for (const model of ['시연 차량 2', '시연 차량 3']) {
+      await page.goto(`${base}/vehicle`);
+      await page.locator('[data-add-vehicle]').click();
+      await page.waitForURL('**/vehicle?new=1');
+      await page.locator('#manufacturer').fill('기아');
+      await page.locator('#model').fill(model);
+      await page.locator('#vehicle-form button[type=submit]').click();
+      await page.waitForURL('**/dashboard');
+      await page.locator('[data-vehicle-name]').filter({ hasText: model }).waitFor();
+    }
+    await page.goto(`${base}/vehicle`);
+    assert.equal(await page.locator('[data-vehicle-select] option').count(), 3);
+    assert.equal(await page.locator('[data-add-vehicle]').isHidden(), true);
+    const fourthVehicleStatus = await page.evaluate(async () => {
+      try {
+        await window.ChageunApi.vehicles.create({ manufacturer: '기아', model: '시연 차량 4' });
+        return 201;
+      } catch (error) {
+        return error.status;
+      }
+    });
+    assert.equal(fourthVehicleStatus, 409);
+    const storedVehicles = await page.evaluate(async () => (await window.ChageunApi.vehicles.list()).data);
+    assert.equal(storedVehicles.length, 3);
+    check('account can register three vehicles and the live API rejects a fourth without storing it');
+
+    const thirdVehicleId = await page.locator('[data-vehicle-select]').inputValue();
+    await Promise.all([
+      page.waitForNavigation(),
+      page.locator('[data-vehicle-select]').selectOption(originalVehicleId),
+    ]);
+    assert.equal(await page.locator('#model').inputValue(), 'K5');
+    await page.goto(`${base}/dashboard`);
+    await page.locator('[data-vehicle-name]').filter({ hasText: 'K5 DL3' }).waitFor();
+    await page.locator('[data-dashboard-records]').filter({ hasText: '입력한 기록' }).waitFor();
+    assert.match(await page.locator('[data-dashboard-records]').innerText(), /입력한 기록/);
+    await Promise.all([
+      page.waitForNavigation(),
+      page.locator('[data-active-vehicle-select]').selectOption(thirdVehicleId),
+    ]);
+    await page.locator('[data-vehicle-name]').filter({ hasText: '시연 차량 3' }).waitFor();
+    await page.locator('[data-dashboard-records]').filter({ hasText: '저장된 관리기록이 없습니다.' }).waitFor();
+    assert.equal(await page.locator('[data-dashboard-records]').innerText(), '저장된 관리기록이 없습니다.');
+    check('active vehicle selection switches the dashboard and keeps each vehicle history separate');
+
     for (const width of [320, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);

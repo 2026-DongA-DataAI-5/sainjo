@@ -19,6 +19,7 @@ MIGRATIONS = (
     "007_add_engine_air_cleaner.sql",
     "008_add_severe_condition_codes.sql",
     "009_add_question_selections.sql",
+    "010_allow_up_to_three_vehicles_per_user.sql",
 )
 
 
@@ -99,6 +100,14 @@ def main():
             cursor.execute("SELECT severe_condition_codes FROM vehicles WHERE id = %s", (vehicle_id,))
             if cursor.fetchone()[0] != "[]":
                 raise AssertionError("Legacy vehicle should receive an empty detailed severe-condition list.")
+            for suffix in ("second", "third"):
+                cursor.execute(
+                    "INSERT INTO vehicles (owner_id, manufacturer, model) VALUES (%s, %s, %s)",
+                    (user_id, "기아", f"K5 {suffix}"),
+                )
+            cursor.execute("SELECT COUNT(*) FROM vehicles WHERE owner_id = %s", (user_id,))
+            if cursor.fetchone()[0] != 3:
+                raise AssertionError("Migration should allow three vehicles for one user.")
             cursor.execute(
                 "SELECT item_key, mileage, result, component_position FROM records WHERE vehicle_id = %s",
                 (vehicle_id,),
@@ -155,7 +164,7 @@ def main():
                 raise AssertionError("Migrated database did not preserve selected question key.")
 
         connection.commit()
-        print("Migration chain 001 → 009 preserves legacy data, stores detailed severe conditions, and supports record items and account-scoped question selections.")
+        print("Migration chain 001 → 010 preserves legacy data, supports three vehicles per user, detailed severe conditions, record items, and account-scoped question selections.")
     except Exception:
         connection.rollback()
         raise

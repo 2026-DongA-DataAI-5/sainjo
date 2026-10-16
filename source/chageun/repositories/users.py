@@ -25,3 +25,10 @@ def find_user_by_id(user_id):
     with get_db().cursor() as cursor:
         cursor.execute("SELECT id, username FROM users WHERE id = %s", (user_id,))
         return cursor.fetchone()
+
+
+def lock_user_for_vehicle_insert(user_id):
+    """Serialize a user's vehicle creation requests until the API transaction commits."""
+    with get_db().cursor() as cursor:
+        cursor.execute("SELECT id FROM users WHERE id = %s FOR UPDATE", (user_id,))
+        return cursor.fetchone() is not None

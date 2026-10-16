@@ -5,11 +5,11 @@
 --   mysql -u <user> -p <chageun_test_db> < chageun/schema.sql
 --
 -- 삭제 정책: 사용자 삭제 시 차량, 차량 삭제 시 기록을 함께 삭제(CASCADE)합니다.
--- 계정당 차량 1대는 vehicles.owner_id UNIQUE로 보장합니다.
+-- 계정당 차량은 최대 3대입니다. API가 users 행을 잠근 뒤 개수를 확인해 동시 등록도 제한합니다.
 -- 날짜·거리가 없는 값은 NULL입니다. 0km와 NULL은 다른 값입니다.
 -- 자료 확인일(checked_date)은 증빙 자동 검증 결과가 아닙니다.
 -- 기존 DB는 migrations/001_vehicle_date_and_service_items.sql부터 번호 순서대로 한 번 적용하세요.
--- 기존 DB 적용 순서: migrations/001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 → 009
+-- 기존 DB 적용 순서: migrations/001 → 002 → 003 → 004 → 005 → 006 → 007 → 008 → 009 → 010
 
 CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
     severe_condition_codes VARCHAR(48) NOT NULL DEFAULT '[]',
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     PRIMARY KEY (id),
-    UNIQUE KEY uq_vehicles_owner (owner_id),
+    KEY idx_vehicles_owner (owner_id),
     CONSTRAINT fk_vehicles_owner FOREIGN KEY (owner_id) REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT ck_vehicles_generation CHECK (generation IS NULL OR generation IN ('DL3', 'JF')),
     CONSTRAINT ck_vehicles_conditions CHECK (conditions IN ('normal', 'severe', 'unknown')),
