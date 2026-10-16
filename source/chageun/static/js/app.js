@@ -791,7 +791,7 @@
       recordForm.elements.namedItem('work_type').value = 'unknown';
       const note = document.createElement('p');
       note.className = 'field-note';
-      note.textContent = '질문에서 선택한 항목과 위치를 불러왔습니다. 실제 작업 유형·날짜·주행거리는 확인한 내용으로 직접 입력해 주세요.';
+      note.textContent = '이전 화면에서 선택한 항목과 위치를 불러왔습니다. 실제 작업 유형·날짜·주행거리는 확인한 내용으로 직접 입력해 주세요.';
       recordForm.prepend(note);
     }
     guardedSubmit(recordForm, async () => {
