@@ -7,6 +7,7 @@
   const api = window.ChageunApi;
   const QUESTION_STORAGE_KEY = 'chageun.questions.v1';
   const APP_BASE_PATH = document.documentElement.dataset.basePath || '';
+  let logoutInProgress = false;
   window.addEventListener('pageshow', (event) => {
     if (event.persisted && api.mode === 'live') window.location.reload();
   });
@@ -515,6 +516,7 @@
   // 서버 모드에서만 /api/auth/me를 호출합니다. 공개 정보인 아이디만 표시하고, 아이디·비밀번호는 저장소나 로그에 남기지 않습니다.
   // 401은 로그인되지 않았거나 세션이 유효하지 않은 경우입니다. 서버 응답만으로는 둘을 구분할 수 없으므로 만료 안내를 붙이지 않습니다.
   function redirectToLogin() {
+    if (logoutInProgress) return;
     window.location.assign(appPath('/login?required=1'));
   }
 
@@ -532,6 +534,7 @@
       showMessage(message, '');
       logoutButton.hidden = false;
       logoutButton.addEventListener('click', async () => {
+        logoutInProgress = true;
         logoutButton.disabled = true;
         showMessage(message, '로그아웃하는 중입니다.');
         try {
@@ -540,9 +543,11 @@
           window.location.assign(appPath('/login'));
         } catch (error) {
           if (error && error.status === 401) {
+            logoutInProgress = false;
             redirectToLogin();
             return;
           }
+          logoutInProgress = false;
           logoutButton.disabled = false;
           showMessage(message, '로그아웃하지 못했습니다. 잠시 후 다시 시도해 주세요.');
         }
