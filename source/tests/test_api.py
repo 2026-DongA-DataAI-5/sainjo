@@ -295,11 +295,13 @@ class AuthApiTest(unittest.TestCase):
         self.create_mock.side_effect = pymysql.err.OperationalError(
             2003, "Can't connect to MySQL server password=super-secret-value"
         )
-        response = self.register()
+        with self.assertLogs("chageun", level="ERROR") as captured:
+            response = self.register()
         self.assert_error(response, 500, "INTERNAL_ERROR")
         text = response.get_data(as_text=True)
         self.assertNotIn("super-secret-value", text)
         self.assertNotIn("MySQL", text)
+        self.assertNotIn("super-secret-value", "\n".join(captured.output))
         self.db.rollback.assert_called()
 
     def test_unknown_api_route_is_404(self):

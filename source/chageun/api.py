@@ -689,12 +689,16 @@ def handle_error(error):
         code = HTTP_ERROR_CODES.get(error.code, "INTERNAL_ERROR")
         return fail(code, "요청을 처리할 수 없습니다.", error.code or 500)
 
-    # DB·내부 오류의 세부 내용은 응답에 넣지 않고 서버 로그에만 남깁니다.
+    # DB 드라이버 예외 문구에 연결 암호가 포함될 수 있어 메시지·traceback은 기록하지 않습니다.
     db = g.get("db")
     if db is not None:
         try:
             db.rollback()
         except Exception:
             pass
-    current_app.logger.exception("API 처리 중 내부 오류")
+    current_app.logger.error(
+        "API 처리 중 내부 오류 (exception_type=%s, endpoint=%s)",
+        type(error).__name__,
+        request.endpoint or "unknown",
+    )
     return fail("INTERNAL_ERROR", "처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", 500)
