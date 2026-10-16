@@ -357,7 +357,7 @@ class MySqlAuthPersistenceTest(unittest.TestCase):
 
 
 class FakeVehicles:
-    """vehicles 테이블을 흉내 내는 메모리 저장소. owner_id UNIQUE(1062)와 소유자 조건을 MySQL처럼 지킵니다."""
+    """vehicles 테이블을 흉내 내는 저장소. 계정당 차량 제한은 API에서 검사합니다."""
 
     def __init__(self):
         self.rows = []
@@ -368,8 +368,6 @@ class FakeVehicles:
         return {key: row[key] for key in VEHICLE_FIELD_KEYS}
 
     def create(self, owner_id, values):
-        if any(row["owner_id"] == owner_id for row in self.rows):
-            raise pymysql.err.IntegrityError(1062, "Duplicate entry for key 'uq_vehicles_owner'")
         row = {key: values[key] for key in VEHICLE_FIELD_KEYS - {"id"}}
         row["reference_date"] = date.fromisoformat(values["reference_date"]) if values["reference_date"] else None
         row["in_service_date"] = date.fromisoformat(values["in_service_date"]) if values["in_service_date"] else None
@@ -378,11 +376,11 @@ class FakeVehicles:
         self.rows.append(row)
         return row["id"]
 
-    def by_owner(self, owner_id):
-        for row in self.rows:
-            if row["owner_id"] == owner_id:
-                return self._public(row)
-        return None
+    def list_by_owner(self, owner_id):
+        return [self._public(row) for row in self.rows if row["owner_id"] == owner_id]
+
+    def count_by_owner(self, owner_id):
+        return sum(row["owner_id"] == owner_id for row in self.rows)
 
     def by_id_and_owner(self, vehicle_id, owner_id):
         for row in self.rows:
@@ -412,8 +410,10 @@ class VehicleApiTest(unittest.TestCase):
         mock.patch("chageun.api.users.create_user", side_effect=self.users.create).start()
         mock.patch("chageun.api.users.find_user_by_username", side_effect=self.users.by_username).start()
         mock.patch("chageun.api.users.find_user_by_id", side_effect=self.users.by_id).start()
+        mock.patch("chageun.api.users.lock_user_for_vehicle_insert", side_effect=lambda user_id: any(row["id"] == user_id for row in self.users.rows.values())).start()
         mock.patch("chageun.api.vehicles.create_vehicle", side_effect=self.vehicles.create).start()
-        mock.patch("chageun.api.vehicles.find_vehicle_by_owner", side_effect=self.vehicles.by_owner).start()
+        mock.patch("chageun.api.vehicles.list_vehicles_by_owner", side_effect=self.vehicles.list_by_owner).start()
+        mock.patch("chageun.api.vehicles.count_vehicles_by_owner", side_effect=self.vehicles.count_by_owner).start()
         mock.patch(
             "chageun.api.vehicles.find_vehicle_by_id_and_owner", side_effect=self.vehicles.by_id_and_owner
         ).start()
@@ -619,20 +619,12 @@ class VehicleApiTest(unittest.TestCase):
                 self.assertIn("conditions", error["error"]["fields"])
                 self.assertEqual(self.vehicles.rows, before)
 
-    def test_second_vehicle_for_same_account_is_409(self):
-        self.assertEqual(self.create(self.client_a).status_code, 201)
-        self.assert_error(self.create(self.client_a, {"manufacturer": "기아", "model": "K5"}), 409, "CONFLICT")
+    def test_account_can_create_three_vehicles_but_not_a_fourth(self):
+        created = [self.create(self.client_a, {"manufacturer": "기아", "model": f"K5 {number}"}) for number in range(1, 4)]
+        self.assertTrue(all(response.status_code == 201 for response in created))
+        self.assert_error(self.create(self.client_a, {"manufacturer": "기아", "model": "K5 4"}), 409, "CONFLICT")
         listing = self.client_a.get("/api/vehicles").get_json()["data"]
-        self.assertEqual(len(listing), 1)
-
-    def test_duplicate_from_db_race_is_409_and_rolled_back(self):
-        with mock.patch("chageun.api.vehicles.find_vehicle_by_owner", return_value=None), mock.patch(
-            "chageun.api.vehicles.create_vehicle",
-            side_effect=pymysql.err.IntegrityError(1062, "Duplicate entry for key 'uq_vehicles_owner'"),
-        ):
-            response = self.create(self.client_a)
-        self.assert_error(response, 409, "CONFLICT")
-        self.db.rollback.assert_called()
+        self.assertEqual(len(listing), 3)
 
     def test_list_returns_own_vehicle_or_empty_list(self):
         self.assertEqual(self.client_a.get("/api/vehicles").get_json()["data"], [])
@@ -641,6 +633,12 @@ class VehicleApiTest(unittest.TestCase):
         self.assertEqual(listing.status_code, 200)
         self.assertEqual(listing.get_json()["data"], [{"id": 1, **VALID_VEHICLE}])
         self.assertEqual(listing.get_json()["meta"]["contract_version"], "1.0")
+
+    def test_list_returns_all_own_vehicles_in_creation_order(self):
+        for model in ("K5", "쏘나타", "아반떼"):
+            self.assertEqual(self.create(self.client_a, {"manufacturer": "현대", "model": model}).status_code, 201)
+        listing = self.client_a.get("/api/vehicles").get_json()["data"]
+        self.assertEqual([vehicle["model"] for vehicle in listing], ["K5", "쏘나타", "아반떼"])
 
     def test_get_own_vehicle_is_200(self):
         self.create(self.client_a)
@@ -802,7 +800,7 @@ class VehicleApiTest(unittest.TestCase):
 
 @unittest.skipUnless(MYSQL_TESTS_ENABLED, "시험 MySQL 확인 환경변수가 없어 실제 DB 시험을 건너뜁니다.")
 class MySqlVehiclePersistenceTest(unittest.TestCase):
-    """실제 MySQL 시험 DB에서 차량 저장 → 재로그인 → 재조회 → 중복 등록 거부가 유지되는지 확인합니다."""
+    """실제 MySQL 시험 DB에서 차량 3대 저장·재로그인 조회와 네 번째 등록 거부를 확인합니다."""
 
     @classmethod
     def setUpClass(cls):
@@ -847,32 +845,37 @@ class MySqlVehiclePersistenceTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         return client
 
-    def test_vehicle_saved_then_reread_after_relogin_and_duplicate_rejected(self):
+    def test_three_vehicles_saved_then_reread_after_relogin_and_fourth_rejected(self):
         username = self.new_account()
         first = self.login(username)
-        created = first.post(
-            "/api/vehicles",
-            json=VALID_VEHICLE,
-            headers={"X-CSRF-Token": first.get("/api/auth/csrf").get_json()["data"]["csrf_token"]},
-        )
-        self.assertEqual(created.status_code, 201)
-        vehicle_id = created.get_json()["data"]["id"]
+        vehicle_ids = []
+        for model in ("K5", "쏘나타", "아반떼"):
+            created = first.post(
+                "/api/vehicles",
+                json={**VALID_VEHICLE, "model": model},
+                headers={"X-CSRF-Token": first.get("/api/auth/csrf").get_json()["data"]["csrf_token"]},
+            )
+            self.assertEqual(created.status_code, 201)
+            vehicle_ids.append(created.get_json()["data"]["id"])
 
         # 새 클라이언트(재로그인)에서 DB에 저장된 값을 다시 읽습니다.
         second = self.login(username)
-        self.assertEqual(second.get("/api/vehicles").get_json()["data"], [{"id": vehicle_id, **VALID_VEHICLE}])
-        detail = second.get(f"/api/vehicles/{vehicle_id}").get_json()["data"]
-        self.assertEqual(detail, {"id": vehicle_id, **VALID_VEHICLE})
+        listing = second.get("/api/vehicles").get_json()["data"]
+        self.assertEqual([vehicle["id"] for vehicle in listing], vehicle_ids)
+        self.assertEqual([vehicle["model"] for vehicle in listing], ["K5", "쏘나타", "아반떼"])
+        detail = second.get(f"/api/vehicles/{vehicle_ids[0]}").get_json()["data"]
+        self.assertEqual(detail, {"id": vehicle_ids[0], **{**VALID_VEHICLE, "model": "K5"}})
         self.assertEqual(detail["mileage"], 0)
         self.assertEqual(detail["reference_date"], "2026-10-01")
 
-        duplicate = second.post(
+        fourth = second.post(
             "/api/vehicles",
-            json={"manufacturer": "기아", "model": "K5"},
+            json={"manufacturer": "기아", "model": "K5 4"},
             headers={"X-CSRF-Token": second.get("/api/auth/csrf").get_json()["data"]["csrf_token"]},
         )
-        self.assertEqual(duplicate.status_code, 409)
-        self.assertEqual(duplicate.get_json()["error"]["code"], "CONFLICT")
+        self.assertEqual(fourth.status_code, 409)
+        self.assertEqual(fourth.get_json()["error"]["code"], "CONFLICT")
+        self.assertEqual(len(second.get("/api/vehicles").get_json()["data"]), 3)
 
     def test_null_mileage_and_date_persist_as_null(self):
         username = self.new_account()

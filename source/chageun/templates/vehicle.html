@@ -2,6 +2,7 @@
 {% block content %}
 <div class="page-heading"><div><p class="eyebrow">차량과 적용 대상</p><h1>차량 정보를 확인해 주세요</h1><p class="lede">K5 JF와 DL3는 다른 세대입니다. 모르는 사양은 미확인으로 남기고, 이 정보만으로 관리 기준을 계산하지 않습니다.</p></div></div>
 <p class="field-note">현재 관리 기준 검토 범위는 국내 판매 2021년형 기아 K5 DL3 · 2.0 가솔린 · G2.0 CVVL · 자동변속기입니다. 다른 사양도 차량과 이력은 등록할 수 있지만, 이 기준을 대신 적용하지 않습니다.</p>
+<section class="content-section" data-vehicle-manager hidden><div class="section-heading"><div><h2>내 차량</h2><p class="muted" data-vehicle-count></p></div><a class="button secondary" data-add-vehicle href="{{ url_for('pages.vehicle') }}?new=1">차량 추가</a></div><label for="vehicle-select">수정할 차량 선택</label><select id="vehicle-select" data-vehicle-select></select></section>
 <form class="form-panel preview-form" id="vehicle-form"><div class="section-heading"><h2>아는 정보만 입력</h2><span class="badge unknown" data-save-status>{{ '서버 저장' if api_mode == 'live' else '가상 저장(mock)' }}</span></div><div class="form-actions"><button class="button secondary" type="button" data-fill-reference-vehicle hidden>기준 차량 사양 채우기</button></div><p class="field-note" data-reference-vehicle-status role="status" aria-live="polite" hidden></p><div class="form-grid">
 <div><label for="manufacturer">제조사</label><input id="manufacturer" name="manufacturer" maxlength="40" placeholder="예: 기아" {% if api_mode == 'live' %}required{% endif %}></div>
 <div><label for="model">모델</label><input id="model" name="model" maxlength="40" placeholder="예: K5" {% if api_mode == 'live' %}required{% endif %}></div>
@@ -27,5 +28,5 @@
 <label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="10">10. 염분·부식물질 또는 한랭지역 주행</label>
 <label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="11">11. 견인·캠핑·지붕 짐칸 사용</label>
 <label class="condition-choice"><input type="checkbox" name="severe_condition_codes" value="12">12. 권장하지 않은 엔진오일 사용</label>
-</div></fieldset><p class="form-message" role="status" aria-live="polite"></p><div class="form-actions"><button class="button primary" type="submit">차량 정보 저장하고 대시보드 보기</button><a class="button secondary" href="{{ url_for('pages.dashboard') }}">대시보드 보기</a></div><p class="muted">{% if api_mode == 'live' %}계정당 차량 1대를 등록합니다. 선택한 운행상황도 계정 차량 정보로 저장됩니다. 등록 후 수정할 수 있습니다.{% else %}가상(mock) 응답으로 저장합니다. 서버 DB에는 보내지 않으며 탭을 닫으면 mock 자료는 사라집니다.{% endif %}</p></form>
+</div></fieldset><p class="form-message" role="status" aria-live="polite"></p><div class="form-actions"><button class="button primary" type="submit">차량 정보 저장하고 대시보드 보기</button><a class="button secondary" href="{{ url_for('pages.dashboard') }}">대시보드 보기</a></div><p class="muted">{% if api_mode == 'live' %}계정당 차량을 0~3대 등록할 수 있습니다. 현재 차량 수와 선택한 운행상황을 서버에 저장하며, 등록한 차량을 선택해 각각 관리할 수 있습니다.{% else %}가상(mock) 응답으로 저장합니다. 서버 DB에는 보내지 않으며 탭을 닫으면 mock 자료는 사라집니다.{% endif %}</p></form>
 {% endblock %}

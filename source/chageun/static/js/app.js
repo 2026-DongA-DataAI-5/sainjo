@@ -6,6 +6,8 @@
 
   const api = window.ChageunApi;
   const QUESTION_STORAGE_KEY = 'chageun.questions.v1';
+  const ACTIVE_VEHICLE_KEY = 'chageun.activeVehicle.v1';
+  const MAX_VEHICLES_PER_ACCOUNT = 3;
   const APP_BASE_PATH = document.documentElement.dataset.basePath || '';
   let logoutInProgress = false;
   window.addEventListener('pageshow', (event) => {
@@ -116,9 +118,44 @@
     });
   }
 
-  async function loadVehicle() {
+  async function loadVehicles() {
     const body = await api.vehicles.list();
-    return body.data[0] || null;
+    return Array.isArray(body.data) ? body.data : [];
+  }
+
+  function activeVehicle(vehicles) {
+    let savedId = null;
+    try { savedId = Number(localStorage.getItem(ACTIVE_VEHICLE_KEY)); } catch (_) { /* storage may be disabled */ }
+    const selected = vehicles.find((vehicle) => vehicle.id === savedId) || vehicles[0] || null;
+    try {
+      if (selected) localStorage.setItem(ACTIVE_VEHICLE_KEY, String(selected.id));
+      else localStorage.removeItem(ACTIVE_VEHICLE_KEY);
+    } catch (_) { /* selection still works for this page load */ }
+    return selected;
+  }
+
+  function setActiveVehicleId(vehicleId) {
+    try {
+      if (vehicleId) localStorage.setItem(ACTIVE_VEHICLE_KEY, String(vehicleId));
+      else localStorage.removeItem(ACTIVE_VEHICLE_KEY);
+    } catch (_) { /* server remains the source of vehicle and history data */ }
+  }
+
+  function fillVehicleSelect(select, vehicles, selectedId) {
+    if (!select) return;
+    select.replaceChildren();
+    vehicles.forEach((vehicle, index) => {
+      const option = document.createElement('option');
+      option.value = String(vehicle.id);
+      const title = [vehicle.manufacturer, vehicle.model].filter(Boolean).join(' ') || `차량 ${index + 1}`;
+      option.textContent = `${title} · ${formatMileage(vehicle.mileage)}`;
+      select.append(option);
+    });
+    if (selectedId) select.value = String(selectedId);
+  }
+
+  async function loadVehicle() {
+    return activeVehicle(await loadVehicles());
   }
 
   async function loadRecords(vehicleId) {
@@ -194,6 +231,11 @@
     const status = form.querySelector('.form-message');
     const referenceVehicleButton = form.querySelector('[data-fill-reference-vehicle]');
     const referenceVehicleStatus = form.querySelector('[data-reference-vehicle-status]');
+    const manager = document.querySelector('[data-vehicle-manager]');
+    const vehicleSelect = manager?.querySelector('[data-vehicle-select]');
+    const vehicleCount = manager?.querySelector('[data-vehicle-count]');
+    const addVehicleLink = manager?.querySelector('[data-add-vehicle]');
+    const createNew = new URLSearchParams(window.location.search).get('new') === '1';
     referenceVehicleButton?.addEventListener('click', () => {
       const referenceVehicle = {
         manufacturer: '기아',
@@ -217,19 +259,44 @@
     lockForm(form, true);
     showMessage(status, '차량 정보를 불러오는 중입니다.');
     try {
-      const vehicle = await loadVehicle();
+      const vehicles = await loadVehicles();
+      const selectedVehicle = activeVehicle(vehicles);
+      const vehicle = createNew ? null : selectedVehicle;
+      if (manager) manager.hidden = vehicles.length === 0;
+      fillVehicleSelect(vehicleSelect, vehicles, selectedVehicle?.id);
+      if (vehicleCount) vehicleCount.textContent = `등록 차량 ${vehicles.length}/${MAX_VEHICLES_PER_ACCOUNT}대`;
+      if (addVehicleLink) {
+        addVehicleLink.hidden = vehicles.length >= MAX_VEHICLES_PER_ACCOUNT;
+        addVehicleLink.addEventListener('click', (event) => {
+          if (vehicles.length >= MAX_VEHICLES_PER_ACCOUNT) event.preventDefault();
+        }, { once: true });
+      }
+      vehicleSelect?.addEventListener('change', () => {
+        setActiveVehicleId(vehicleSelect.value);
+        window.location.assign(appPath('/vehicle'));
+      });
+      if (createNew && vehicles.length >= MAX_VEHICLES_PER_ACCOUNT) {
+        form.dataset.createNew = 'true';
+        form.dataset.vehicleLimitReached = 'true';
+        showMessage(status, '계정당 최대 3대까지 등록할 수 있습니다. 기존 차량을 선택해 수정해 주세요.');
+        form.querySelector('button[type="submit"]').disabled = true;
+        return;
+      }
       if (referenceVehicleButton) referenceVehicleButton.hidden = Boolean(vehicle);
       if (vehicle) fillVehicleForm(form, vehicle);
       syncSevereConditionControls(form);
-      if (vehicle && api.mode === 'live') {
+      if (vehicle) {
         form.dataset.existingVehicle = 'true';
-        form.querySelectorAll('input, select').forEach((field) => {
-          field.disabled = false;
-        });
+        form.dataset.editingVehicleId = String(vehicle.id);
+        form.dataset.createNew = 'false';
         form.querySelector('button[type="submit"]').textContent = '차량 정보 수정 저장';
         form.querySelector('[data-save-status]').textContent = '등록 차량 · 정보 수정';
         showMessage(status, '수정할 항목만 바꾸세요. 제조사와 모델은 필수이며, 모르는 선택 항목은 비워 둘 수 있습니다.');
       } else {
+        form.dataset.existingVehicle = 'false';
+        form.dataset.createNew = 'true';
+        form.querySelector('button[type="submit"]').textContent = '차량 등록하고 대시보드 보기';
+        form.querySelector('[data-save-status]').textContent = `차량 등록 · ${vehicles.length}/${MAX_VEHICLES_PER_ACCOUNT}대`;
         showMessage(status, '');
       }
     } catch (error) {
@@ -238,6 +305,7 @@
       showMessage(status, errorText(error));
     } finally {
       lockForm(form, false);
+      if (form.dataset.vehicleLimitReached) form.querySelector('button[type="submit"]').disabled = true;
       if (form.dataset.loadFailed) form.querySelector('button[type="submit"]').disabled = true;
     }
   }
@@ -583,7 +651,16 @@
       }
     }
     try {
-      const vehicle = await loadVehicle();
+      const vehicles = await loadVehicles();
+      const vehicle = activeVehicle(vehicles);
+      const picker = document.querySelector('[data-active-vehicle-picker]');
+      const pickerSelect = picker?.querySelector('[data-active-vehicle-select]');
+      fillVehicleSelect(pickerSelect, vehicles, vehicle?.id);
+      if (picker) picker.hidden = vehicles.length < 2;
+      pickerSelect?.addEventListener('change', () => {
+        setActiveVehicleId(pickerSelect.value);
+        window.location.reload();
+      });
       if (summary) renderVehicleSummary(summary, vehicle);
       summaryReady = true;
       if (list) {
@@ -834,16 +911,16 @@
     initVehicleForm(vehicleForm);
     guardedSubmit(vehicleForm, async () => {
       const payload = vehicleFromForm(vehicleForm);
-      const current = await loadVehicle();
-      if (current && api.mode === 'live') {
-        if (vehicleForm.dataset.existingVehicle !== 'true') {
-          throw new api.ApiError({ status: 409, code: 'CONFLICT', message: '이미 등록된 차량입니다. 화면을 새로고침해 주세요.' });
-        }
-        await api.vehicles.update(current.id, payload);
-      } else if (current) {
-        await api.vehicles.update(current.id, payload);
+      const current = vehicleForm.dataset.createNew === 'true'
+        ? null
+        : await loadVehicles().then((vehicles) => vehicles.find((vehicle) => String(vehicle.id) === vehicleForm.dataset.editingVehicleId) || null);
+      if (vehicleForm.dataset.createNew === 'true') {
+        const created = await api.vehicles.create(payload);
+        setActiveVehicleId(created.data.id);
       } else {
-        await api.vehicles.create(payload);
+        if (!current) throw new api.ApiError({ status: 404, code: 'NOT_FOUND', message: '수정할 차량을 찾을 수 없습니다. 차량 목록을 새로고침해 주세요.' });
+        await api.vehicles.update(current.id, payload);
+        setActiveVehicleId(current.id);
       }
       window.location.assign(appPath('/dashboard'));
     });

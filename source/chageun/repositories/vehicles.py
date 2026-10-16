@@ -1,6 +1,6 @@
 """vehicles 테이블 접근. 커밋은 호출하는 API가 합니다. 모든 SQL은 파라미터 바인딩을 사용합니다.
 
-계정당 차량 1대는 DB의 UNIQUE(owner_id)가 최종적으로 보장합니다.
+계정당 최대 3대 제한은 API 트랜잭션에서 사용자 행 잠금과 차량 개수 확인으로 보장합니다.
 """
 
 import json
@@ -36,14 +36,21 @@ def create_vehicle(owner_id, values):
         return cursor.lastrowid
 
 
-def find_vehicle_by_owner(owner_id):
+def list_vehicles_by_owner(owner_id):
     with get_db().cursor() as cursor:
         cursor.execute(
             "SELECT id, manufacturer, model, generation, year, engine, fuel, transmission, "
-            "mileage, reference_date, in_service_date, conditions, severe_condition_codes FROM vehicles WHERE owner_id = %s",
+            "mileage, reference_date, in_service_date, conditions, severe_condition_codes "
+            "FROM vehicles WHERE owner_id = %s ORDER BY id",
             (owner_id,),
         )
-        return cursor.fetchone()
+        return cursor.fetchall()
+
+
+def count_vehicles_by_owner(owner_id):
+    with get_db().cursor() as cursor:
+        cursor.execute("SELECT COUNT(*) AS total FROM vehicles WHERE owner_id = %s", (owner_id,))
+        return cursor.fetchone()["total"]
 
 
 def find_vehicle_by_id_and_owner(vehicle_id, owner_id):

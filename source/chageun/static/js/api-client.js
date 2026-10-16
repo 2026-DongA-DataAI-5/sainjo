@@ -366,7 +366,7 @@
       if (method === 'GET') return envelope(store.vehicles.map((vehicle) => ({ ...vehicle })));
       if (method === 'POST') {
         const value = validate(VEHICLE_SCHEMA, payload, { partial: false });
-        if (store.vehicles.length > 0) throw mockError(409, 'CONFLICT', '이 계정에는 이미 등록된 차량이 있습니다.');
+        if (store.vehicles.length >= 3) throw mockError(409, 'CONFLICT', '계정당 차량은 최대 3대까지 등록할 수 있습니다.');
         const vehicle = { id: store.nextId.vehicle++, ...value, created_at: new Date().toISOString() };
         store.vehicles.push(vehicle);
         saveStore(store);

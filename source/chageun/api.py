@@ -42,6 +42,7 @@ VEHICLE_FIELDS = set(VEHICLE_TEXT_LIMITS) | {
 VEHICLE_YEAR_MIN = 1900
 VEHICLE_YEAR_MAX = 2035
 VEHICLE_MILEAGE_MAX = 1000000
+MAX_VEHICLES_PER_ACCOUNT = 3
 DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 # 로그인 실패 시 아이디 존재 여부가 시간 차이로 드러나지 않도록 항상 해시 검사를 한 번 수행합니다.
@@ -358,14 +359,14 @@ def _vehicle_out(row):
 
 
 def _vehicle_conflict():
-    return fail("CONFLICT", "이미 등록된 차량이 있습니다. 계정당 차량은 1대만 등록할 수 있습니다.", 409)
+    return fail("CONFLICT", "계정당 차량은 최대 3대까지 등록할 수 있습니다.", 409)
 
 
 @api.get("/vehicles")
 @login_required
 def list_vehicles():
-    row = vehicles.find_vehicle_by_owner(session["user_id"])
-    return ok([_vehicle_out(row)] if row is not None else [])
+    rows = vehicles.list_vehicles_by_owner(session["user_id"])
+    return ok([_vehicle_out(row) for row in rows])
 
 
 @api.post("/vehicles")
@@ -382,17 +383,15 @@ def add_vehicle():
     owner_id = session["user_id"]
     db = get_db()
     try:
-        if vehicles.find_vehicle_by_owner(owner_id) is not None:
+        # Lock the parent user row so two concurrent requests cannot both pass the three-car check.
+        if not users.lock_user_for_vehicle_insert(owner_id):
+            db.rollback()
+            return fail("AUTH_REQUIRED", "로그인이 필요합니다.", 401)
+        if vehicles.count_vehicles_by_owner(owner_id) >= MAX_VEHICLES_PER_ACCOUNT:
             db.rollback()
             return _vehicle_conflict()
         vehicle_id = vehicles.create_vehicle(owner_id, values)
         db.commit()
-    except pymysql.err.IntegrityError as error:
-        db.rollback()
-        # 동시 요청으로 두 번째 차량이 들어오면 uq_vehicles_owner가 1062를 냅니다.
-        if error.args and error.args[0] == DUPLICATE_KEY_ERROR:
-            return _vehicle_conflict()
-        raise
     except Exception:
         db.rollback()
         raise
